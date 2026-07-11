@@ -540,6 +540,12 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     [providerGroups, currentModelSelection],
   );
 
+  // "auto" lets the provider decide which actions need approval: Claude
+  // Code's permission classifier, or Codex's auto-review reviewer ("Approve
+  // for me"). Other providers have no equivalent, so the option is hidden.
+  const supportsAutoRuntimeMode =
+    selectedProviderStatus?.driver === "claudeAgent" || selectedProviderStatus?.driver === "codex";
+
   // ── Options menu ─────────────────────────────────────────
   const optionsMenuActions = useMemo(
     () => [
@@ -552,10 +558,13 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
             ? "Approve actions"
             : currentRuntimeMode === "auto-accept-edits"
               ? "Auto-accept edits"
-              : "Full access",
+              : currentRuntimeMode === "auto"
+                ? "Auto"
+                : "Full access",
         subactions: [
           { id: "options:runtime:approval-required", title: "Approve actions" },
           { id: "options:runtime:auto-accept-edits", title: "Auto-accept edits" },
+          ...(supportsAutoRuntimeMode ? [{ id: "options:runtime:auto", title: "Auto" }] : []),
           { id: "options:runtime:full-access", title: "Full access" },
         ].map((option) => {
           const value = option.id.replace("options:runtime:", "");
@@ -583,7 +592,12 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
         }),
       },
     ],
-    [currentInteractionMode, currentRuntimeMode, providerOptionDescriptors],
+    [
+      currentInteractionMode,
+      currentRuntimeMode,
+      providerOptionDescriptors,
+      supportsAutoRuntimeMode,
+    ],
   );
 
   // ── Menu handlers ────────────────────────────────────────

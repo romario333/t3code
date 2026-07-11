@@ -17,7 +17,10 @@ import type {
 } from "@t3tools/client-runtime/state/shell";
 
 export type SessionPhase = "disconnected" | "connecting" | "ready" | "running";
-export const DEFAULT_RUNTIME_MODE: RuntimeMode = "full-access";
+// "auto" is offered for Claude and Codex in the picker; drafts for other
+// providers that carry it are downgraded on provider switch and mapped
+// safely by the server otherwise.
+export const DEFAULT_RUNTIME_MODE: RuntimeMode = "auto";
 
 export const DEFAULT_INTERACTION_MODE: ProviderInteractionMode = "default";
 export const DEFAULT_THREAD_TERMINAL_HEIGHT = 280;

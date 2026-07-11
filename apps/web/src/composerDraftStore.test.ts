@@ -70,6 +70,7 @@ import {
   DraftId,
 } from "./composerDraftStore";
 import { removeLocalStorageItem, setLocalStorageItem } from "./hooks/useLocalStorage";
+import { DEFAULT_RUNTIME_MODE } from "./types";
 import {
   INLINE_TERMINAL_CONTEXT_PLACEHOLDER,
   insertInlineTerminalContextPlaceholder,
@@ -750,7 +751,7 @@ describe("composerDraftStore project draft thread mapping", () => {
       branch: "feature/test",
       worktreePath: "/tmp/worktree-test",
       envMode: "worktree",
-      runtimeMode: "full-access",
+      runtimeMode: DEFAULT_RUNTIME_MODE,
       interactionMode: "default",
       createdAt: "2026-01-01T00:00:00.000Z",
     });
@@ -761,7 +762,7 @@ describe("composerDraftStore project draft thread mapping", () => {
       branch: "feature/test",
       worktreePath: "/tmp/worktree-test",
       envMode: "worktree",
-      runtimeMode: "full-access",
+      runtimeMode: DEFAULT_RUNTIME_MODE,
       interactionMode: "default",
       createdAt: "2026-01-01T00:00:00.000Z",
     });

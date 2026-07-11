@@ -187,6 +187,13 @@ export function NewTaskDraftScreen(props: {
     [flow.selectedModel?.options, flow.selectedModelOption?.capabilities],
   );
 
+  // "auto" lets the provider decide which actions need approval: Claude
+  // Code's permission classifier, or Codex's auto-review reviewer ("Approve
+  // for me"). Other providers have no equivalent, so the option is hidden.
+  const supportsAutoRuntimeMode =
+    flow.selectedModelOption?.providerDriver === "claudeAgent" ||
+    flow.selectedModelOption?.providerDriver === "codex";
+
   const optionsMenuActions = useMemo(
     () => [
       ...buildProviderOptionMenuActions(providerOptionDescriptors),
@@ -198,10 +205,13 @@ export function NewTaskDraftScreen(props: {
             ? "Approve actions"
             : flow.runtimeMode === "auto-accept-edits"
               ? "Auto-accept edits"
-              : "Full access",
+              : flow.runtimeMode === "auto"
+                ? "Auto"
+                : "Full access",
         subactions: [
           { id: "options:runtime:approval-required", title: "Approve actions" },
           { id: "options:runtime:auto-accept-edits", title: "Auto-accept edits" },
+          ...(supportsAutoRuntimeMode ? [{ id: "options:runtime:auto", title: "Auto" }] : []),
           { id: "options:runtime:full-access", title: "Full access" },
         ].map((option) => {
           const value = option.id.replace("options:runtime:", "");
@@ -229,7 +239,7 @@ export function NewTaskDraftScreen(props: {
         }),
       },
     ],
-    [flow.interactionMode, flow.runtimeMode, providerOptionDescriptors],
+    [flow.interactionMode, flow.runtimeMode, providerOptionDescriptors, supportsAutoRuntimeMode],
   );
 
   const workspaceMenuActions = useMemo(() => {

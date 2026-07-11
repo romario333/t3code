@@ -200,7 +200,11 @@ import {
   useThreadRefs,
 } from "../state/entities";
 import { environmentShell } from "../state/shell";
-import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
+import {
+  ChatComposer,
+  providerSupportsAutoRuntimeMode,
+  type ChatComposerHandle,
+} from "./chat/ChatComposer";
 import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
@@ -4824,11 +4828,22 @@ function ChatViewContent(props: ChatViewProps) {
         nextModelSelection,
       );
       setStickyComposerModelSelection(nextModelSelection);
+      // Only Claude and Codex honor "auto"; leaving it selected while
+      // switching to another provider would send a mode it can't honor.
+      if (
+        runtimeMode === "auto" &&
+        resolvedDriverKind !== null &&
+        !providerSupportsAutoRuntimeMode(resolvedDriverKind)
+      ) {
+        handleRuntimeModeChange("auto-accept-edits");
+      }
       scheduleComposerFocus();
     },
     [
       activeThread,
+      handleRuntimeModeChange,
       lockedProvider,
+      runtimeMode,
       scheduleComposerFocus,
       setComposerDraftModelSelection,
       setStickyComposerModelSelection,
