@@ -89,6 +89,7 @@ import {
 import { ensureLocalApi, readLocalApi } from "../../localApi";
 import { isMacPlatform } from "../../lib/utils";
 import {
+  primaryServerConfigAtom,
   primaryServerObservabilityAtom,
   primaryServerProvidersAtom,
   serverEnvironment,
@@ -1610,6 +1611,7 @@ export function GeneralSettingsPanel() {
   );
   const observability = useAtomValue(primaryServerObservabilityAtom);
   const serverProviders = useAtomValue(primaryServerProvidersAtom);
+  const serverOs = useAtomValue(primaryServerConfigAtom)?.environment.platform.os;
   const diagnosticsDescription = formatDiagnosticsDescription({
     localTracingEnabled: observability?.localTracingEnabled ?? false,
     otlpTracesEnabled: observability?.otlpTracesEnabled ?? false,
@@ -1814,6 +1816,20 @@ export function GeneralSettingsPanel() {
             />
           }
         />
+
+        {serverOs === "darwin" && (
+          <SettingsRow
+            title="Keep awake"
+            description="Prevent this Mac and its display from sleeping while the server is running (uses caffeinate). Also available in the sidebar."
+            control={
+              <Switch
+                checked={settings.keepAwake}
+                onCheckedChange={(checked) => updateSettings({ keepAwake: Boolean(checked) })}
+                aria-label="Keep this Mac awake"
+              />
+            }
+          />
+        )}
 
         <SettingsRow
           title={
