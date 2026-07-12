@@ -618,6 +618,9 @@ export const ServerSettings = Schema.Struct({
    */
   enableAgentBrowserAccess: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   backgroundActivity: BackgroundActivitySettings,
+  // Keep the host machine awake (via `caffeinate` on macOS) while enabled.
+  // Global, not persisted per project; only effective on darwin hosts.
+  keepAwake: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   // Legacy flat fields retained for old settings files and old clients. New
   // consumers should resolve `backgroundActivity` instead.
   automaticGitFetchInterval: Schema.DurationFromMillis.pipe(
@@ -833,6 +836,7 @@ export const ServerSettingsPatch = Schema.Struct({
       overrides: Schema.optionalKey(BackgroundActivityOverrides),
     }),
   ),
+  keepAwake: Schema.optionalKey(Schema.Boolean),
   automaticGitFetchInterval: Schema.optionalKey(Schema.DurationFromMillis),
   providerHealthRefreshInterval: Schema.optionalKey(Schema.DurationFromMillis),
   backgroundActivityProfile: Schema.optionalKey(BackgroundActivityProfile),
