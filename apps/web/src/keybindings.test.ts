@@ -139,6 +139,14 @@ const DEFAULT_BINDINGS = compile([
   },
   { shortcut: modShortcut("o", { shiftKey: true }), command: "chat.new" },
   { shortcut: modShortcut("n", { shiftKey: true }), command: "chat.newLocal" },
+  {
+    shortcut: modShortcut("escape", { modKey: false }),
+    command: "chat.interrupt",
+    whenAst: whenAnd(
+      whenAnd(whenIdentifier("chatRunning"), whenNot(whenIdentifier("terminalFocus"))),
+      whenNot(whenIdentifier("modelPickerOpen")),
+    ),
+  },
   { shortcut: modShortcut("o"), command: "editor.openFavorite" },
   { shortcut: modShortcut("[", { shiftKey: true }), command: "thread.previous" },
   { shortcut: modShortcut("]", { shiftKey: true }), command: "thread.next" },
@@ -586,6 +594,34 @@ describe("chat/editor shortcuts", () => {
         { platform: "Win32" },
       ),
       "themeEditor.toggle",
+    );
+  });
+
+  it("matches chat.interrupt on escape only while a chat is running", () => {
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "Escape" }), DEFAULT_BINDINGS, {
+        platform: "MacIntel",
+        context: { chatRunning: true },
+      }),
+      "chat.interrupt",
+    );
+    assert.isNull(
+      resolveShortcutCommand(event({ key: "Escape" }), DEFAULT_BINDINGS, {
+        platform: "MacIntel",
+        context: { chatRunning: false },
+      }),
+    );
+    assert.isNull(
+      resolveShortcutCommand(event({ key: "Escape" }), DEFAULT_BINDINGS, {
+        platform: "MacIntel",
+        context: { chatRunning: true, terminalFocus: true },
+      }),
+    );
+    assert.isNull(
+      resolveShortcutCommand(event({ key: "Escape" }), DEFAULT_BINDINGS, {
+        platform: "MacIntel",
+        context: { chatRunning: true, modelPickerOpen: true },
+      }),
     );
   });
 
