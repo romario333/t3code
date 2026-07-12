@@ -174,6 +174,7 @@ describe("projectActivityPayload", () => {
         toolCallId: "tool-command",
         kind: "execute",
         rawOutput: { content: "first useful line" },
+        toolOutput: "unused stdout",
       },
     });
 

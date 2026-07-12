@@ -2035,31 +2035,41 @@ function workEntryRawCommand(
   return rawCommand === workEntry.command.trim() ? null : rawCommand;
 }
 
+function toolOutputCoversDetail(output: string, detail: string): boolean {
+  return output.includes(detail.replace(/(?:…|\.\.\.)$/u, "").trim());
+}
+
 function buildToolCallExpandedBody(
   workEntry: TimelineWorkEntry,
   workspaceRoot: string | undefined,
 ): string | null {
   const blocks: string[] = [];
-  if (workEntry.itemType === "mcp_tool_call" && workEntry.toolData !== undefined) {
-    blocks.push(`MCP call\n${JSON.stringify(workEntry.toolData, null, 2)}`);
+  const appendUniqueBlock = (value: string | null | undefined) => {
+    const trimmed = value?.trim();
+    if (trimmed && !blocks.includes(trimmed)) {
+      blocks.push(trimmed);
+    }
+  };
+  const showMcpToolData =
+    workEntry.itemType === "mcp_tool_call" && workEntry.toolData !== undefined;
+  if (showMcpToolData) {
+    appendUniqueBlock(`MCP call\n${JSON.stringify(workEntry.toolData, null, 2)}`);
   }
-  const raw = workEntryRawCommand(workEntry);
-  if (raw?.trim()) {
-    blocks.push(raw.trim());
-  } else if (workEntry.command?.trim()) {
-    blocks.push(workEntry.command.trim());
-  }
-  if (workEntry.detail?.trim()) {
-    blocks.push(workEntry.detail.trim());
+  appendUniqueBlock(workEntryRawCommand(workEntry) ?? workEntry.command);
+  const output = showMcpToolData ? null : (workEntry.toolOutput?.trim() ?? null);
+  const detail = workEntry.detail?.trim();
+  if (detail && !(output && toolOutputCoversDetail(output, detail))) {
+    appendUniqueBlock(detail);
   }
   const changedFiles = workEntry.changedFiles ?? [];
   if (changedFiles.length > 0) {
-    blocks.push(
+    appendUniqueBlock(
       changedFiles
         .map((filePath) => formatWorkspaceRelativePath(filePath, workspaceRoot))
         .join("\n"),
     );
   }
+  appendUniqueBlock(output);
   return blocks.length > 0 ? blocks.join("\n\n") : null;
 }
 

@@ -179,6 +179,57 @@ describe("buildThreadFeed", () => {
     );
   });
 
+  it("includes full command output in expanded work rows", () => {
+    const turnId = TurnId.make("turn-output");
+    const thread = makeThread({
+      id: ThreadId.make("thread-output"),
+      projectId: ProjectId.make("project-1"),
+      title: "Command output",
+      latestTurn: {
+        turnId,
+        state: "completed",
+        requestedAt: "2026-04-01T00:00:00.000Z",
+        startedAt: "2026-04-01T00:00:01.000Z",
+        completedAt: "2026-04-01T00:00:03.000Z",
+        assistantMessageId: null,
+      },
+      activities: [
+        makeActivity({
+          id: EventId.make("command-completed"),
+          kind: "tool.completed",
+          tone: "tool",
+          summary: "Run tests",
+          createdAt: "2026-04-01T00:00:02.000Z",
+          turnId,
+          payload: {
+            title: "Run tests",
+            itemType: "command_execution",
+            detail: "bun run test",
+            status: "completed",
+            data: {
+              toolName: "Bash",
+              input: { command: "bun run test" },
+              result: {
+                type: "tool_result",
+                tool_use_id: "toolu_1",
+                content: "42 tests passed",
+              },
+            },
+          },
+        }),
+      ],
+    });
+
+    const group = buildThreadFeed(thread)[0];
+    expect(group).toMatchObject({ type: "activity-group" });
+    if (!group || group.type !== "activity-group") {
+      return;
+    }
+
+    expect(group.activities[0]?.getFullDetail()).toContain("bun run test");
+    expect(group.activities[0]?.getFullDetail()).toContain("42 tests passed");
+  });
+
   it("keeps MCP inputs available to expanded mobile work rows", () => {
     const turnId = TurnId.make("turn-mcp");
     const thread = makeThread({
