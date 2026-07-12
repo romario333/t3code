@@ -2206,6 +2206,7 @@ export function GeneralSettingsPanel() {
     connectedEnvironments.every(
       (target) => target.serverConfig?.environment.capabilities.threadRestartContinuation === true,
     );
+  const serverOs = environment?.serverConfig?.environment.platform.os;
 
   const textGenerationProviders = serverProviders.filter(
     (provider) => provider.supportsTextGeneration !== false,
@@ -2909,6 +2910,20 @@ export function GeneralSettingsPanel() {
             />
           }
         />
+
+        {serverOs === "darwin" && (
+          <SettingsRow
+            title="Keep awake"
+            description="Prevent this Mac from sleeping while the server is running (uses caffeinate). The display can still sleep. Also available in the sidebar."
+            control={
+              <Switch
+                checked={settings.keepAwake}
+                onCheckedChange={(checked) => updateSettings({ keepAwake: Boolean(checked) })}
+                aria-label="Keep this Mac awake"
+              />
+            }
+          />
+        )}
 
         <SettingsRow
           {...searchableSetting("continue-threads-after-server-update")}
