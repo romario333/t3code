@@ -20,6 +20,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "../ui/sidebar";
+import { SidebarKeepAwakeToggle } from "./SidebarKeepAwakeToggle";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarUpdatePill } from "./SidebarUpdatePill";
 
@@ -123,6 +124,7 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
       <SidebarProviderUpdatePill />
       <SidebarUpdatePill />
       <SidebarMenu>
+        <SidebarKeepAwakeToggle />
         <SidebarMenuItem>
           <SidebarMenuButton onClick={handleSettingsClick}>
             <SettingsIcon />
