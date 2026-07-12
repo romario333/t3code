@@ -13,6 +13,7 @@ import {
   type ThreadId,
   type TurnId,
 } from "@t3tools/contracts";
+import { extractToolResultOutput } from "@t3tools/shared/toolActivity";
 
 import type {
   ChatMessage,
@@ -73,6 +74,8 @@ export interface WorkLogEntry {
   tone: "thinking" | "tool" | "info" | "error";
   toolTitle?: string;
   toolData?: unknown;
+  /** Full tool output (command stdout, result text) when the provider reported it. */
+  toolOutput?: string;
   itemType?: ToolLifecycleItemType;
   requestKind?: PendingApproval["requestKind"];
   /** From runtime item / task payload `status` when present (e.g. tool.updated). */
@@ -836,6 +839,10 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
       entry.toolData = data.item;
     }
   }
+  const toolOutput = isTaskActivity ? undefined : extractToolResultOutput(payload?.data);
+  if (toolOutput) {
+    entry.toolOutput = toolOutput;
+  }
   if (itemType) {
     entry.itemType = itemType;
   }
@@ -1011,6 +1018,7 @@ function mergeDerivedWorkLogEntries(
   const toolCallId = next.toolCallId ?? previous.toolCallId;
   const toolLifecycleStatus = next.toolLifecycleStatus ?? previous.toolLifecycleStatus;
   const toolData = next.toolData ?? previous.toolData;
+  const toolOutput = next.toolOutput ?? previous.toolOutput;
   return {
     ...previous,
     ...next,
@@ -1025,6 +1033,7 @@ function mergeDerivedWorkLogEntries(
     ...(toolCallId ? { toolCallId } : {}),
     ...(toolLifecycleStatus !== undefined ? { toolLifecycleStatus } : {}),
     ...(toolData !== undefined ? { toolData } : {}),
+    ...(toolOutput !== undefined ? { toolOutput } : {}),
   };
 }
 
