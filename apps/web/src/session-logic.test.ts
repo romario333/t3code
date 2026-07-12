@@ -828,6 +828,66 @@ describe("deriveWorkLogEntries", () => {
     ]);
   });
 
+  it("captures full tool output from payload data", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "tool-complete",
+        summary: "Ran command",
+        kind: "tool.completed",
+        payload: {
+          itemType: "command_execution",
+          detail: "ls",
+          data: {
+            toolName: "Bash",
+            input: { command: "ls" },
+            result: {
+              type: "tool_result",
+              tool_use_id: "toolu_1",
+              content: "README.md\nsrc",
+            },
+          },
+        },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities);
+    expect(entries[0]?.toolOutput).toBe("README.md\nsrc");
+  });
+
+  it("keeps tool output from tool.updated when the collapsed tool.completed lacks it", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "tool-updated",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        summary: "Ran command",
+        kind: "tool.updated",
+        payload: {
+          itemType: "command_execution",
+          detail: "ls",
+          data: {
+            toolCallId: "call-1",
+            rawOutput: { stdout: "README.md" },
+          },
+        },
+      }),
+      makeActivity({
+        id: "tool-complete",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        summary: "Ran command",
+        kind: "tool.completed",
+        payload: {
+          itemType: "command_execution",
+          detail: "ls",
+          data: { toolCallId: "call-1" },
+        },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.toolOutput).toBe("README.md");
+  });
+
   it("omits checkpoint captured info entries", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({

@@ -183,6 +183,84 @@ function classifyToolAction(input: {
   return "other";
 }
 
+const MAX_TOOL_RESULT_OUTPUT_LENGTH = 20_000;
+
+function truncateToolResultOutput(value: string): string {
+  if (value.length <= MAX_TOOL_RESULT_OUTPUT_LENGTH) {
+    return value;
+  }
+  return `${value.slice(0, MAX_TOOL_RESULT_OUTPUT_LENGTH)}\n… [output truncated]`;
+}
+
+function joinToolOutputParts(parts: ReadonlyArray<string | undefined>): string | undefined {
+  const filtered = parts.filter((part): part is string => part !== undefined);
+  return filtered.length > 0 ? filtered.join("\n") : undefined;
+}
+
+function textFromToolContent(value: unknown, depth: number): string | undefined {
+  if (depth > 4) {
+    return undefined;
+  }
+  const direct = asTrimmedString(value);
+  if (direct) {
+    return direct;
+  }
+  if (Array.isArray(value)) {
+    return joinToolOutputParts(value.map((entry) => textFromToolContent(entry, depth + 1)));
+  }
+  const record = asRecord(value);
+  if (!record) {
+    return undefined;
+  }
+  return asTrimmedString(record.text) ?? textFromToolContent(record.content, depth + 1);
+}
+
+function textFromToolRawOutput(rawOutput: unknown): string | undefined {
+  const direct = asTrimmedString(rawOutput);
+  if (direct) {
+    return direct;
+  }
+  const record = asRecord(rawOutput);
+  if (!record) {
+    return undefined;
+  }
+  const stdio = joinToolOutputParts([
+    asTrimmedString(record.stdout),
+    asTrimmedString(record.stderr),
+  ]);
+  if (stdio) {
+    return stdio;
+  }
+  return (
+    textFromToolContent(record.content, 0) ??
+    asTrimmedString(record.output) ??
+    asTrimmedString(record.aggregatedOutput)
+  );
+}
+
+/**
+ * Extracts the human-readable output of a tool call (command stdout, file
+ * contents, tool result text) from a tool lifecycle payload's `data`, which
+ * differs in shape per provider adapter (Claude `result` blocks, ACP
+ * `rawOutput`/`content`, Codex `item.aggregatedOutput`/`item.result`).
+ */
+export function extractToolResultOutput(data: unknown): string | undefined {
+  const record = asRecord(data);
+  if (!record) {
+    return undefined;
+  }
+  const item = asRecord(record.item);
+  const output =
+    asTrimmedString(record.toolOutput) ??
+    textFromToolRawOutput(record.rawOutput) ??
+    textFromToolContent(record.result, 0) ??
+    asTrimmedString(item?.aggregatedOutput) ??
+    asTrimmedString(item?.output) ??
+    textFromToolContent(item?.result, 0) ??
+    textFromToolContent(record.content, 0);
+  return output === undefined ? undefined : truncateToolResultOutput(output);
+}
+
 export interface ToolActivityPresentationInput {
   readonly itemType?: ToolLifecycleItemType | null | undefined;
   readonly title?: string | null | undefined;

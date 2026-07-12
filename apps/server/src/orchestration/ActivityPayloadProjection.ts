@@ -3,6 +3,7 @@ import type {
   OrchestrationThreadActivity,
   OrchestrationThreadDetailSnapshot,
 } from "@t3tools/contracts";
+import { extractToolResultOutput } from "@t3tools/shared/toolActivity";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -308,6 +309,14 @@ export function projectActivityPayload(
   const rawOutput = projectRawOutput(data.rawOutput);
   if (rawOutput) {
     projectedData.rawOutput = rawOutput;
+  }
+
+  // Clients render the full (already capped) tool output in expanded work
+  // rows; precompute it from the unprojected data so dropping the bulky
+  // provider-specific fields does not change what they derive.
+  const toolOutput = extractToolResultOutput(data);
+  if (toolOutput !== undefined) {
+    projectedData.toolOutput = toolOutput;
   }
 
   return {

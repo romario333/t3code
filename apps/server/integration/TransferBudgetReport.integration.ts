@@ -30,11 +30,14 @@ interface ProviderTransferBudget {
 // deterministic 9 MB retained-result fixture. Full MCP results stay in
 // persistence, so accidentally shipping them again exceeds these caps by
 // orders of magnitude. The CI report preserves exact values for review.
+// Fork: the projection additionally carries capped (20k chars) toolOutput
+// for expanded work rows, so these caps sit ~30% above the fork's larger
+// observed payloads rather than upstream's.
 const TRANSFER_BUDGET = {
-  totalWireBytes: 15_500,
-  threadSnapshotWireBytes: 7_500,
-  measuredTurnWebSocketWireBytes: 8_000,
-  measuredTurnWebSocketDecodedBytes: 68_000,
+  totalWireBytes: 37_500,
+  threadSnapshotWireBytes: 23_000,
+  measuredTurnWebSocketWireBytes: 14_500,
+  measuredTurnWebSocketDecodedBytes: 94_000,
   measuredTurnWebSocketMessages: 21,
 } satisfies ProviderTransferBudget;
 
