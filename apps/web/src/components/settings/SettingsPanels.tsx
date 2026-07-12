@@ -84,7 +84,9 @@ import {
   primaryServerConfigAtom,
   primaryServerObservabilityAtom,
   primaryServerProvidersAtom,
+  serverEnvironment,
 } from "../../state/server";
+import { usePrimaryEnvironment } from "../../state/environments";
 import { useProjects } from "../../state/entities";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
@@ -1882,6 +1884,7 @@ export function GeneralSettingsPanel() {
   const serverProviders = useAtomValue(primaryServerProvidersAtom);
   const supportsAutoSettlement =
     useAtomValue(primaryServerConfigAtom)?.environment.capabilities.threadAutoSettlement === true;
+  const serverOs = useAtomValue(primaryServerConfigAtom)?.environment.platform.os;
   const diagnosticsDescription = formatDiagnosticsDescription({
     localTracingEnabled: observability?.localTracingEnabled ?? false,
     otlpTracesEnabled: observability?.otlpTracesEnabled ?? false,
@@ -2158,6 +2161,20 @@ export function GeneralSettingsPanel() {
             />
           }
         />
+
+        {serverOs === "darwin" && (
+          <SettingsRow
+            title="Keep awake"
+            description="Prevent this Mac from sleeping while the server is running (uses caffeinate). The display can still sleep. Also available in the sidebar."
+            control={
+              <Switch
+                checked={settings.keepAwake}
+                onCheckedChange={(checked) => updateSettings({ keepAwake: Boolean(checked) })}
+                aria-label="Keep this Mac awake"
+              />
+            }
+          />
+        )}
 
         <SettingsRow
           id={searchableSetting("background-activity").id}
