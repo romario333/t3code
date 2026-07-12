@@ -8,6 +8,7 @@ import type {
   UserInputQuestion,
 } from "@t3tools/contracts";
 import { formatDuration } from "@t3tools/shared/orchestrationTiming";
+import { extractToolResultOutput } from "@t3tools/shared/toolActivity";
 
 import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
@@ -74,6 +75,8 @@ interface WorkLogEntry {
   requestKind?: PendingApproval["requestKind"];
   toolLifecycleStatus?: WorkLogToolLifecycleStatus;
   toolData?: unknown;
+  /** Full tool output (command stdout, result text) when the provider reported it. */
+  toolOutput?: string;
 }
 
 interface DerivedWorkLogEntry extends WorkLogEntry {
@@ -327,6 +330,10 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
       entry.toolData = data.item;
     }
   }
+  const toolOutput = isTaskActivity ? undefined : extractToolResultOutput(payload?.data);
+  if (toolOutput) {
+    entry.toolOutput = toolOutput;
+  }
   if (itemType) {
     entry.itemType = itemType;
   }
@@ -392,6 +399,7 @@ function mergeDerivedWorkLogEntries(
   const collapseKey = next.collapseKey ?? previous.collapseKey;
   const toolLifecycleStatus = next.toolLifecycleStatus ?? previous.toolLifecycleStatus;
   const toolData = next.toolData ?? previous.toolData;
+  const toolOutput = next.toolOutput ?? previous.toolOutput;
   return {
     ...previous,
     ...next,
@@ -405,6 +413,7 @@ function mergeDerivedWorkLogEntries(
     ...(collapseKey ? { collapseKey } : {}),
     ...(toolLifecycleStatus ? { toolLifecycleStatus } : {}),
     ...(toolData !== undefined ? { toolData } : {}),
+    ...(toolOutput !== undefined ? { toolOutput } : {}),
   };
 }
 
@@ -533,6 +542,10 @@ function workEntryIcon(entry: DerivedWorkLogEntry): ThreadFeedActivity["icon"] {
   return "zap";
 }
 
+function toolOutputCoversDetail(output: string, detail: string): boolean {
+  return output.includes(detail.replace(/(?:…|\.\.\.)$/u, "").trim());
+}
+
 function buildWorkEntryExpandedBody(entry: WorkLogEntry): string | null {
   const blocks: string[] = [];
   const appendUniqueBlock = (value: string | null | undefined) => {
@@ -542,14 +555,20 @@ function buildWorkEntryExpandedBody(entry: WorkLogEntry): string | null {
     }
   };
 
-  if (entry.itemType === "mcp_tool_call" && entry.toolData !== undefined) {
+  const showMcpToolData = entry.itemType === "mcp_tool_call" && entry.toolData !== undefined;
+  if (showMcpToolData) {
     appendUniqueBlock(`MCP call\n${JSON.stringify(entry.toolData, null, 2)}`);
   }
   appendUniqueBlock(entry.rawCommand ?? entry.command);
-  appendUniqueBlock(entry.detail);
+  const output = showMcpToolData ? undefined : entry.toolOutput?.trim();
+  const detail = entry.detail?.trim();
+  if (detail && !(output && toolOutputCoversDetail(output, detail))) {
+    appendUniqueBlock(detail);
+  }
   if ((entry.changedFiles?.length ?? 0) > 0) {
     appendUniqueBlock(entry.changedFiles!.join("\n"));
   }
+  appendUniqueBlock(output);
 
   return blocks.length > 0 ? blocks.join("\n\n") : null;
 }
