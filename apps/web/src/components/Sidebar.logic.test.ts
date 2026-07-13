@@ -607,10 +607,21 @@ describe("resolveThreadStatusPill", () => {
     ).toMatchObject({ label: "Awaiting Input", pulse: false });
   });
 
-  it("falls back to working when the thread is actively running without blockers", () => {
+  it("shows planning when a plan-mode thread is actively running without blockers", () => {
     expect(
       resolveThreadStatusPill({
         thread: baseThread,
+      }),
+    ).toMatchObject({ label: "Planning", pulse: true });
+  });
+
+  it("falls back to working when a default-mode thread is actively running without blockers", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          interactionMode: "default" as const,
+        },
       }),
     ).toMatchObject({ label: "Working", pulse: true });
   });
