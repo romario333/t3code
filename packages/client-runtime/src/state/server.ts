@@ -290,6 +290,13 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:trace-diagnostics",
       tag: WS_METHODS.serverGetTraceDiagnostics,
     }),
+    providerEventLog: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:server:provider-event-log",
+      tag: WS_METHODS.serverGetProviderEventLog,
+      staleTimeMs: 2_000,
+      refreshIntervalMs: 3_000,
+      idleTtlMs: 30_000,
+    }),
     processDiagnostics: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:server:process-diagnostics",
       tag: WS_METHODS.serverGetProcessDiagnostics,

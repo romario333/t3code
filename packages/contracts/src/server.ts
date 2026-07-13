@@ -298,6 +298,31 @@ export const ServerTraceDiagnosticsResult = Schema.Struct({
 });
 export type ServerTraceDiagnosticsResult = typeof ServerTraceDiagnosticsResult.Type;
 
+export const ServerProviderEventLogInput = Schema.Struct({
+  threadId: ThreadId,
+});
+export type ServerProviderEventLogInput = typeof ServerProviderEventLogInput.Type;
+
+export const ServerProviderEventLogStream = Schema.Literals(["native", "canonical"]);
+export type ServerProviderEventLogStream = typeof ServerProviderEventLogStream.Type;
+
+export const ServerProviderEventLogEntry = Schema.Struct({
+  timestamp: Schema.String,
+  stream: ServerProviderEventLogStream,
+  summary: Schema.String,
+  raw: Schema.String,
+  truncated: Schema.Boolean,
+});
+export type ServerProviderEventLogEntry = typeof ServerProviderEventLogEntry.Type;
+
+export const ServerProviderEventLogResult = Schema.Struct({
+  logFilePath: TrimmedNonEmptyString,
+  exists: Schema.Boolean,
+  truncatedHead: Schema.Boolean,
+  entries: Schema.Array(ServerProviderEventLogEntry),
+});
+export type ServerProviderEventLogResult = typeof ServerProviderEventLogResult.Type;
+
 export const ServerProcessSignal = Schema.Literals(["SIGINT", "SIGKILL"]);
 export type ServerProcessSignal = typeof ServerProcessSignal.Type;
 

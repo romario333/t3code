@@ -126,6 +126,8 @@ import {
   ServerSelfUpdateInput,
   ServerSelfUpdateResult,
   ServerTraceDiagnosticsResult,
+  ServerProviderEventLogInput,
+  ServerProviderEventLogResult,
   ServerProcessDiagnosticsResult,
   ServerProcessResourceHistoryInput,
   ServerProcessResourceHistoryResult,
@@ -215,6 +217,7 @@ export const WS_METHODS = {
   serverUpdateSettings: "server.updateSettings",
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverGetTraceDiagnostics: "server.getTraceDiagnostics",
+  serverGetProviderEventLog: "server.getProviderEventLog",
   serverGetProcessDiagnostics: "server.getProcessDiagnostics",
   serverGetProcessResourceHistory: "server.getProcessResourceHistory",
   serverSignalProcess: "server.signalProcess",
@@ -310,6 +313,12 @@ export const WsServerDiscoverSourceControlRpc = Rpc.make(WS_METHODS.serverDiscov
 export const WsServerGetTraceDiagnosticsRpc = Rpc.make(WS_METHODS.serverGetTraceDiagnostics, {
   payload: Schema.Struct({}),
   success: ServerTraceDiagnosticsResult,
+  error: EnvironmentAuthorizationError,
+});
+
+export const WsServerGetProviderEventLogRpc = Rpc.make(WS_METHODS.serverGetProviderEventLog, {
+  payload: ServerProviderEventLogInput,
+  success: ServerProviderEventLogResult,
   error: EnvironmentAuthorizationError,
 });
 
@@ -710,6 +719,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateSettingsRpc,
   WsServerDiscoverSourceControlRpc,
   WsServerGetTraceDiagnosticsRpc,
+  WsServerGetProviderEventLogRpc,
   WsServerGetProcessDiagnosticsRpc,
   WsServerGetProcessResourceHistoryRpc,
   WsServerSignalProcessRpc,
