@@ -37,6 +37,10 @@ const configuredRelayTracingDataset = repoEnv.VITE_RELAY_OTLP_TRACES_DATASET?.tr
 const configuredRelayTracingToken = repoEnv.VITE_RELAY_OTLP_TRACES_TOKEN?.trim() || "";
 const configuredHostedAppChannel = process.env.VITE_HOSTED_APP_CHANNEL?.trim() || "";
 const configuredAppVersion = process.env.APP_VERSION?.trim() || pkg.version;
+// Upstream stable tag this build was rebased onto (e.g. "v0.0.28"). Set once per
+// port so the app can tell when a newer upstream stable release is out. Decoupled
+// from the display version on purpose; falls back to it when unset.
+const configuredUpstreamBase = process.env.T3CODE_UPSTREAM_BASE?.trim() || configuredAppVersion;
 const configuredHostedAppUrl = (() => {
   const explicitHostedAppUrl = process.env.VITE_HOSTED_APP_URL?.trim();
   if (explicitHostedAppUrl) {
@@ -174,6 +178,7 @@ export default defineConfig(() => {
       "import.meta.env.VITE_HOSTED_APP_URL": JSON.stringify(configuredHostedAppUrl ?? ""),
       "import.meta.env.VITE_HOSTED_APP_CHANNEL": JSON.stringify(configuredHostedAppChannel),
       "import.meta.env.APP_VERSION": JSON.stringify(configuredAppVersion),
+      "import.meta.env.T3CODE_UPSTREAM_BASE": JSON.stringify(configuredUpstreamBase),
     },
     resolve: {
       tsconfigPaths: true,
