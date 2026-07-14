@@ -2377,6 +2377,48 @@ describe("ProviderRuntimeIngestion", () => {
     expect(resolvedPayload?.requestType).toBe("command_execution_approval");
   });
 
+  it("carries the full command on command approvals even when detail is truncated", async () => {
+    const harness = await createHarness();
+    const now = "2026-01-01T00:00:00.000Z";
+    const fullCommand = `python3 -c '${"print(1); ".repeat(40)}'`;
+    expect(fullCommand.length).toBeGreaterThan(180);
+
+    harness.emit({
+      type: "request.opened",
+      eventId: asEventId("evt-request-opened-full-command"),
+      provider: ProviderDriverKind.make("claudeAgent"),
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      requestId: ApprovalRequestId.make("req-full-command"),
+      payload: {
+        requestType: "command_execution_approval",
+        detail: `Bash: ${fullCommand}`,
+        args: { toolName: "Bash", input: { command: fullCommand } },
+      },
+    });
+
+    await waitForThread(harness.readModel, (entry) =>
+      entry.activities.some(
+        (activity: ProviderRuntimeTestActivity) =>
+          activity.id === "evt-request-opened-full-command",
+      ),
+    );
+
+    const readModel = await harness.readModel();
+    const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
+    const requested = thread?.activities.find(
+      (activity: ProviderRuntimeTestActivity) => activity.id === "evt-request-opened-full-command",
+    );
+    const payload =
+      requested?.payload && typeof requested.payload === "object"
+        ? (requested.payload as Record<string, unknown>)
+        : undefined;
+    // `detail` stays truncated for timeline rows, but the full command is
+    // preserved so the approval UI can show exactly what will run.
+    expect(payload?.command).toBe(fullCommand);
+    expect((payload?.detail as string).length).toBeLessThanOrEqual(180);
+  });
+
   it("maps runtime.error into errored session state", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";

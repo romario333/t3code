@@ -94,6 +94,8 @@ export interface PendingApproval {
   requestKind: "command" | "file-read" | "file-change";
   createdAt: string;
   detail?: string;
+  /** Full command for command approvals (untruncated, unlike `detail`). */
+  command?: string;
 }
 
 export interface PendingUserInput {
@@ -380,6 +382,7 @@ export function derivePendingApprovals(
           ? requestKindFromRequestType(payload.requestType)
           : null;
     const detail = payload && typeof payload.detail === "string" ? payload.detail : undefined;
+    const command = payload && typeof payload.command === "string" ? payload.command : undefined;
 
     if (activity.kind === "approval.requested" && requestId && requestKind) {
       openByRequestId.set(requestId, {
@@ -387,6 +390,7 @@ export function derivePendingApprovals(
         requestKind,
         createdAt: activity.createdAt,
         ...(detail ? { detail } : {}),
+        ...(command ? { command } : {}),
       });
       continue;
     }
