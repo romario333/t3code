@@ -49,6 +49,10 @@ const configuredDesktopUpdateRepository =
   process.env.T3CODE_DESKTOP_UPDATE_REPOSITORY?.trim() ||
   process.env.GITHUB_REPOSITORY?.trim() ||
   "";
+// Upstream stable tag this build was rebased onto (e.g. "v0.0.28"). Set once per
+// port so the app can tell when a newer upstream stable release is out. Decoupled
+// from the display version on purpose; falls back to it when unset.
+const configuredUpstreamBase = process.env.T3CODE_UPSTREAM_BASE?.trim() || configuredAppVersion;
 const configuredHostedAppUrl = (() => {
   const explicitHostedAppUrl = process.env.VITE_HOSTED_APP_URL?.trim();
   if (explicitHostedAppUrl) {
@@ -318,6 +322,7 @@ export default defineConfig(() => {
       ),
       "import.meta.env.VITE_RELEASE_CHANNEL": JSON.stringify(configuredReleaseChannel),
       "import.meta.env.APP_VERSION": JSON.stringify(configuredAppVersion),
+      "import.meta.env.T3CODE_UPSTREAM_BASE": JSON.stringify(configuredUpstreamBase),
     },
     resolve: {
       tsconfigPaths: true,
