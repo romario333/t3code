@@ -203,6 +203,7 @@ import {
 import { sortThreads } from "../lib/threadSort";
 import { SidebarKeepAwakeToggle } from "./sidebar/SidebarKeepAwakeToggle";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
+import { SidebarUpstreamReleasePill } from "./sidebar/SidebarUpstreamReleasePill";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useIsMobile } from "~/hooks/useMediaQuery";
 import { CommandDialogTrigger } from "./ui/command";
@@ -2816,6 +2817,7 @@ const SidebarChromeFooter = memo(function SidebarChromeFooter() {
     <SidebarFooter className="p-2">
       <SidebarProviderUpdatePill />
       <SidebarUpdatePill />
+      <SidebarUpstreamReleasePill />
       <SidebarMenu>
         <SidebarKeepAwakeToggle />
         <SidebarMenuItem>
