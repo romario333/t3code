@@ -34,6 +34,7 @@ import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPr
 import { SidebarKeepAwakeToggle } from "./SidebarKeepAwakeToggle";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
+import { SidebarUpstreamReleasePill } from "./SidebarUpstreamReleasePill";
 
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
   isElectron,
@@ -228,6 +229,7 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
     <SidebarFooter className="px-[var(--sidebar-content-inset)] py-1">
       <SidebarProviderUpdatePill />
       <SidebarUpdateArchitectureWarning />
+      <SidebarUpstreamReleasePill />
       <SidebarKeepAwakeToggle />
       <SidebarUtilityMenu />
     </SidebarFooter>
