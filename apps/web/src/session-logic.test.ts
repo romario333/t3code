@@ -91,6 +91,34 @@ describe("derivePendingApprovals", () => {
     ]);
   });
 
+  it("carries the full command through when present", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "approval-open-command",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "approval.requested",
+        summary: "Command approval requested",
+        tone: "approval",
+        payload: {
+          requestId: "req-command",
+          requestKind: "command",
+          detail: "Bash: python3 -c 'print(1)'",
+          command: "python3 -c 'print(1)'",
+        },
+      }),
+    ];
+
+    expect(derivePendingApprovals(activities)).toEqual([
+      {
+        requestId: "req-command",
+        requestKind: "command",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        detail: "Bash: python3 -c 'print(1)'",
+        command: "python3 -c 'print(1)'",
+      },
+    ]);
+  });
+
   it("maps canonical requestType payloads into pending approvals", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({
