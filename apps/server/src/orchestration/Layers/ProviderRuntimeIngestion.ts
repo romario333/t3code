@@ -208,6 +208,35 @@ function truncateDetail(value: string, limit = 180): string {
   return value.length > limit ? `${value.slice(0, limit - 3)}...` : value;
 }
 
+// Command approvals carry a short, heavily truncated `detail` summary for
+// timeline rows; the approval UI needs the actual command so the user can see
+// exactly what is about to run. The full command is preserved separately (read
+// from the raw tool input the provider attached to the request), capped only to
+// guard against pathological payloads.
+const APPROVAL_COMMAND_MAX_LENGTH = 4000;
+
+function extractApprovalCommand(args: unknown): string | undefined {
+  if (!args || typeof args !== "object") {
+    return undefined;
+  }
+  const input = (args as { input?: unknown }).input;
+  if (!input || typeof input !== "object") {
+    return undefined;
+  }
+  const record = input as Record<string, unknown>;
+  const candidate = record.command ?? record.cmd;
+  if (typeof candidate !== "string") {
+    return undefined;
+  }
+  const trimmed = candidate.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  return trimmed.length > APPROVAL_COMMAND_MAX_LENGTH
+    ? `${trimmed.slice(0, APPROVAL_COMMAND_MAX_LENGTH - 1)}…`
+    : trimmed;
+}
+
 function normalizeProposedPlanMarkdown(planMarkdown: string | undefined): string | undefined {
   const trimmed = planMarkdown?.trim();
   if (!trimmed) {
@@ -372,6 +401,8 @@ export function runtimeEventToActivities(
         return [];
       }
       const requestKind = requestKindFromCanonicalRequestType(event.payload.requestType);
+      const approvalCommand =
+        requestKind === "command" ? extractApprovalCommand(event.payload.args) : undefined;
       return [
         {
           id: event.eventId,
@@ -391,6 +422,7 @@ export function runtimeEventToActivities(
             ...(requestKind ? { requestKind } : {}),
             requestType: event.payload.requestType,
             ...(event.payload.detail ? { detail: event.payload.detail } : {}),
+            ...(approvalCommand ? { command: approvalCommand } : {}),
           },
           turnId: toTurnId(event.turnId) ?? null,
           ...maybeSequence,

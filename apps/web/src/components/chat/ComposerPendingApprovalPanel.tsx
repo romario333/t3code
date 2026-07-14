@@ -23,6 +23,10 @@ export const ComposerPendingApprovalPanel = memo(function ComposerPendingApprova
         ? "File to read"
         : "File change";
 
+  // Full command for command approvals; fall back to the short `detail` summary
+  // for other kinds (or older/other providers that don't attach the command).
+  const requestBody = approval.command ?? approval.detail ?? null;
+
   return (
     <div className="px-4 py-3.5 sm:px-5 sm:py-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -32,15 +36,15 @@ export const ComposerPendingApprovalPanel = memo(function ComposerPendingApprova
           <span className="text-xs text-muted-foreground">1/{pendingCount}</span>
         ) : null}
       </div>
-      {approval.detail ? (
+      {requestBody ? (
         <div className="mt-3 rounded-lg border border-border/65 bg-background/70 p-3">
           <p className="text-xs font-medium text-muted-foreground">{detailLabel}</p>
           <pre
             aria-label={detailLabel}
-            className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground"
+            className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground select-text"
             data-approval-detail="complete"
           >
-            {approval.detail}
+            {requestBody}
           </pre>
         </div>
       ) : null}

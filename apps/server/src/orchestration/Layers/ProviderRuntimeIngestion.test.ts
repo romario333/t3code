@@ -2608,6 +2608,49 @@ describe("ProviderRuntimeIngestion", () => {
     expect(resolvedPayload?.requestType).toBe("command_execution_approval");
   });
 
+  it("carries the raw command on command approvals alongside the detail summary", async () => {
+    const harness = await createHarness();
+    const now = "2026-01-01T00:00:00.000Z";
+    const fullCommand = `python3 -c '${"print(1); ".repeat(40)}'`;
+    expect(fullCommand.length).toBeGreaterThan(180);
+
+    harness.emit({
+      type: "request.opened",
+      eventId: asEventId("evt-request-opened-full-command"),
+      provider: ProviderDriverKind.make("claudeAgent"),
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      requestId: ApprovalRequestId.make("req-full-command"),
+      payload: {
+        requestType: "command_execution_approval",
+        detail: `Bash: ${fullCommand}`,
+        args: { toolName: "Bash", input: { command: fullCommand } },
+      },
+    });
+
+    await waitForThread(harness.readModel, (entry) =>
+      entry.activities.some(
+        (activity: ProviderRuntimeTestActivity) =>
+          activity.id === "evt-request-opened-full-command",
+      ),
+    );
+
+    const readModel = await harness.readModel();
+    const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
+    const requested = thread?.activities.find(
+      (activity: ProviderRuntimeTestActivity) => activity.id === "evt-request-opened-full-command",
+    );
+    const payload =
+      requested?.payload && typeof requested.payload === "object"
+        ? (requested.payload as Record<string, unknown>)
+        : undefined;
+    // `command` is the raw command without the adapter's `<toolName>: ` prefix
+    // (and without its length cap), so the approval UI can show exactly what
+    // will run; `detail` keeps the adapter-formatted summary.
+    expect(payload?.command).toBe(fullCommand);
+    expect(payload?.detail).toBe(`Bash: ${fullCommand}`);
+  });
+
   it("maps runtime.error into errored session state", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
