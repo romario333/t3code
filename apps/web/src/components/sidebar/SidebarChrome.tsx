@@ -20,6 +20,7 @@ import {
 import { SidebarKeepAwakeToggle } from "./SidebarKeepAwakeToggle";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarUpdatePill } from "./SidebarUpdatePill";
+import { SidebarUpstreamReleasePill } from "./SidebarUpstreamReleasePill";
 
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
   isElectron,
@@ -112,6 +113,7 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
     <SidebarFooter className="p-2">
       <SidebarProviderUpdatePill />
       <SidebarUpdatePill />
+      <SidebarUpstreamReleasePill />
       <SidebarMenu>
         <SidebarKeepAwakeToggle />
         <SidebarMenuItem>
