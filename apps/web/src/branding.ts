@@ -26,3 +26,6 @@ export const APP_DISPLAY_NAME =
   formatAppDisplayName({ baseName: APP_BASE_NAME, stageLabel: APP_STAGE_LABEL });
 export const APP_VERSION = import.meta.env.APP_VERSION || "0.0.0";
 export const DESKTOP_DOWNLOAD_URL = "https://t3.codes/download";
+// Upstream stable tag this fork build was rebased onto (e.g. "v0.0.28"), stamped at
+// build time via T3CODE_UPSTREAM_BASE. Used to detect newer upstream releases.
+export const UPSTREAM_BASE_VERSION = import.meta.env.T3CODE_UPSTREAM_BASE || APP_VERSION;
