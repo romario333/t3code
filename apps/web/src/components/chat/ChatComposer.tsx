@@ -2795,6 +2795,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               "relative px-3 pb-2 sm:px-4",
               hasComposerHeader ? "pt-2.5 sm:pt-3" : "pt-3.5 sm:pt-4",
               isComposerCollapsedMobile && "hidden",
+              // During a command approval the command is shown in the panel above
+              // and the only actions are the approval buttons below, so the text
+              // input area has no purpose — hide it entirely.
+              isComposerApprovalState && "hidden",
             )}
           >
             <ComposerStashBadge
@@ -2981,7 +2985,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 onPaste={onComposerPaste}
                 placeholder={
                   isComposerApprovalState
-                    ? (activePendingApproval?.detail ?? "Resolve this approval request to continue")
+                    ? "Resolve this approval request to continue"
                     : activePendingProgress
                       ? "Type your own answer, or leave this blank to use the selected option"
                       : showPlanFollowUpPrompt && activeProposedPlan
@@ -3028,7 +3032,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
           {/* Bottom toolbar */}
           {isComposerCollapsedMobile ? null : activePendingApproval ? (
-            <div className="flex items-center justify-end gap-2 px-2.5 pb-2.5 sm:px-3 sm:pb-3">
+            <div className="flex items-center justify-end gap-2 px-2.5 pb-2.5 pt-3 sm:px-3 sm:pb-3">
               <ComposerPendingApprovalActions
                 requestId={activePendingApproval.requestId}
                 isResponding={respondingRequestIds.includes(activePendingApproval.requestId)}
