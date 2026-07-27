@@ -116,6 +116,7 @@ import {
   isTrailingDoubleClick,
   orderItemsByPreferredIds,
   resolveAdjacentThreadId,
+  resolveCompletedTurnDurationMs,
   resolveSettledTimestamp,
   resolveSidebarV2Status,
   searchSidebarThreadsByTitle,
@@ -542,6 +543,7 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
                       className: "text-emerald-700 dark:text-emerald-300",
                     }
                   : null;
+  const completedDurationMs = resolveCompletedTurnDurationMs(thread);
 
   const gitCwd = thread.worktreePath ?? props.projectCwd;
   const gitStatus = useEnvironmentQuery(
@@ -1002,6 +1004,12 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
                       {status === "working" ? (
                         <span aria-hidden>
                           <WorkingDuration startedAt={resolveWorkingStartedAt(thread)} />
+                        </span>
+                      ) : /* Done keeps the number Working was ticking up: how
+                            long the run took, frozen at completion. */
+                      topStatus.icon === "done" && completedDurationMs !== null ? (
+                        <span aria-hidden className="tabular-nums">
+                          {formatWorkingDurationLabel(completedDurationMs)}
                         </span>
                       ) : null}
                     </span>
