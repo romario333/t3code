@@ -1147,6 +1147,26 @@ export function resolveWorkingStartedAt(
   return resolveThreadWorkingStartedAt(thread);
 }
 
+/** How long the finished run took, so a done row keeps the number its
+    Working label was ticking up. Counts from the run's start (request time
+    when it was never adopted) to completion. Null when the run is still
+    running or either end is missing or malformed — a done row without a
+    duration just drops the suffix. */
+export function resolveCompletedRunDurationMs(
+  thread: Pick<SidebarThreadSummary, "latestRun">,
+): number | null {
+  const run = thread.latestRun;
+  if (!run || run.completedAt === null) return null;
+  const completedMs = Date.parse(run.completedAt);
+  if (Number.isNaN(completedMs)) return null;
+  const startedMs = firstValidTimestampMs(run.startedAt, run.requestedAt);
+  if (startedMs === 0) return null;
+  const elapsedMs = completedMs - startedMs;
+  // Clock skew between the run's two stamps can invert them; a negative
+  // duration is noise, not a zero-length run.
+  return elapsedMs < 0 ? null : elapsedMs;
+}
+
 export function formatWorkingDurationLabel(elapsedMs: number): string {
   const seconds = Number.isFinite(elapsedMs) ? Math.max(0, Math.floor(elapsedMs / 1000)) : 0;
   if (seconds < 60) return `${seconds}s`;

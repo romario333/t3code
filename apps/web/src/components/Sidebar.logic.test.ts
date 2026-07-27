@@ -41,6 +41,7 @@ import {
   resolveThreadStatusPill,
   resolveWorkingStartedAt,
   searchSidebarThreads,
+  resolveCompletedRunDurationMs,
   shouldClearThreadSelectionOnMouseDown,
   shouldShowSidebarV2Duration,
   shouldRecedeSidebarThread,
@@ -1189,6 +1190,52 @@ describe("resolveWorkingStartedAt", () => {
   });
 });
 
+describe("resolveCompletedRunDurationMs", () => {
+  it("measures a completed run from its start", () => {
+    expect(resolveCompletedRunDurationMs({ latestRun: makeLatestRun() })).toBe(5 * 60_000);
+  });
+
+  it("falls back to the request time when the run was never adopted", () => {
+    expect(
+      resolveCompletedRunDurationMs({
+        latestRun: makeLatestRun({ startedAt: null }),
+      }),
+    ).toBe(5 * 60_000);
+  });
+
+  it("skips a malformed startedAt instead of returning NaN", () => {
+    expect(
+      resolveCompletedRunDurationMs({
+        latestRun: makeLatestRun({ startedAt: "not-a-date" }),
+      }),
+    ).toBe(5 * 60_000);
+  });
+
+  it("returns null while the run is still running", () => {
+    expect(
+      resolveCompletedRunDurationMs({ latestRun: makeLatestRun({ completedAt: null }) }),
+    ).toBeNull();
+  });
+
+  it("returns null without a run", () => {
+    expect(resolveCompletedRunDurationMs({ latestRun: null })).toBeNull();
+  });
+
+  it("returns null for a malformed completedAt", () => {
+    expect(
+      resolveCompletedRunDurationMs({ latestRun: makeLatestRun({ completedAt: "nope" }) }),
+    ).toBeNull();
+  });
+
+  it("returns null when the stamps are inverted by clock skew", () => {
+    expect(
+      resolveCompletedRunDurationMs({
+        latestRun: makeLatestRun({ completedAt: "2026-03-09T09:59:00.000Z" }),
+      }),
+    ).toBeNull();
+  });
+});
+
 describe("formatWorkingDurationLabel", () => {
   it("formats seconds, minutes, and hours", () => {
     expect(formatWorkingDurationLabel(0)).toBe("0s");
@@ -2062,7 +2109,7 @@ describe("navigation after parking a thread", () => {
             snoozedUntil,
             snoozedAt: null,
             session: null,
-            latestTurn: null,
+            latestRun: null,
             hasPendingApprovals,
             hasPendingUserInput: false,
           },
