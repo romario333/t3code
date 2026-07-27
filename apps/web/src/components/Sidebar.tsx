@@ -150,6 +150,7 @@ import {
   planSidebarThreadDrop,
   reduceSidebarProjectScopeMenuState,
   resolveAdjacentThreadId,
+  resolveCompletedTurnDurationMs,
   resolveSidebarDropTarget,
   resolveSidebarDropVerb,
   type SidebarDropVerb,
@@ -1162,6 +1163,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                     }
                   : null;
   const isWokeStatus = topStatus?.icon === "woke";
+  const completedDurationMs = resolveCompletedTurnDurationMs(thread);
 
   const branchMismatch = resolveLocalCheckoutBranchMismatch({
     effectiveEnvMode: thread.worktreePath === null ? "local" : "worktree",
@@ -1798,6 +1800,12 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                           {status === "working" ? (
                             <span aria-hidden>
                               <WorkingDuration startedAt={resolveWorkingStartedAt(thread)} />
+                            </span>
+                          ) : /* Done keeps the number Working was ticking up: how
+                                long the run took, frozen at completion. */
+                          topStatus.icon === "done" && completedDurationMs !== null ? (
+                            <span aria-hidden className="tabular-nums">
+                              {formatWorkingDurationLabel(completedDurationMs)}
                             </span>
                           ) : null}
                         </span>
