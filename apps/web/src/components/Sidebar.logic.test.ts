@@ -21,6 +21,7 @@ import {
   resolveThreadStatusPill,
   resolveWorkingStartedAt,
   searchSidebarThreadsByTitle,
+  resolveCompletedTurnDurationMs,
   formatWorkingDurationLabel,
   shouldNavigateAfterProjectRemoval,
   shouldClearThreadSelectionOnMouseDown,
@@ -991,6 +992,52 @@ describe("resolveWorkingStartedAt", () => {
 
   it("returns null with neither a running turn nor a session", () => {
     expect(resolveWorkingStartedAt({ latestTurn: null, session: null })).toBeNull();
+  });
+});
+
+describe("resolveCompletedTurnDurationMs", () => {
+  it("measures a completed turn from its start", () => {
+    expect(resolveCompletedTurnDurationMs({ latestTurn: makeLatestTurn() })).toBe(5 * 60_000);
+  });
+
+  it("falls back to the request time when the turn was never adopted", () => {
+    expect(
+      resolveCompletedTurnDurationMs({
+        latestTurn: makeLatestTurn({ startedAt: null }),
+      }),
+    ).toBe(5 * 60_000);
+  });
+
+  it("skips a malformed startedAt instead of returning NaN", () => {
+    expect(
+      resolveCompletedTurnDurationMs({
+        latestTurn: makeLatestTurn({ startedAt: "not-a-date" }),
+      }),
+    ).toBe(5 * 60_000);
+  });
+
+  it("returns null while the turn is still running", () => {
+    expect(
+      resolveCompletedTurnDurationMs({ latestTurn: makeLatestTurn({ completedAt: null }) }),
+    ).toBeNull();
+  });
+
+  it("returns null without a turn", () => {
+    expect(resolveCompletedTurnDurationMs({ latestTurn: null })).toBeNull();
+  });
+
+  it("returns null for a malformed completedAt", () => {
+    expect(
+      resolveCompletedTurnDurationMs({ latestTurn: makeLatestTurn({ completedAt: "nope" }) }),
+    ).toBeNull();
+  });
+
+  it("returns null when the stamps are inverted by clock skew", () => {
+    expect(
+      resolveCompletedTurnDurationMs({
+        latestTurn: makeLatestTurn({ completedAt: "2026-03-09T09:59:00.000Z" }),
+      }),
+    ).toBeNull();
   });
 });
 
