@@ -2,19 +2,19 @@
 #
 # Build the custom-fork T3 Code desktop dmg (Apple Silicon).
 #
-# Bump UPSTREAM_BASE once per port, to the upstream stable tag this branch was
+# Bump UPSTREAM_BASE once per port, to the upstream tag this branch was
 # rebased onto. It feeds two things that must stay in sync:
 #   - T3CODE_UPSTREAM_BASE : drives the in-app "new upstream release" pill
 #   - --build-version      : stamps the build as <base>-auto.<N>
 #
 # Usage:
-#   ./build.sh          # -> 0.0.28-auto.1
-#   ./build.sh 3        # -> 0.0.28-auto.3   (bump N each rebuild of the same base)
+#   ./build.sh          # -> <base>-auto.1
+#   ./build.sh 3        # -> <base>-auto.3   (bump N each rebuild of the same base)
 #
 set -euo pipefail
 
-# The upstream stable tag this build is based on.
-UPSTREAM_BASE="v0.0.28"
+# The upstream tag this build is based on (stable or nightly).
+UPSTREAM_BASE="v0.0.29-nightly.20260727.915"
 
 # Fork iteration on top of that base; override as the first argument.
 BUILD_NUMBER="${1:-1}"
