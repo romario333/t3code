@@ -634,6 +634,26 @@ export function resolveWorkingStartedAt(
   return firstValidTimestamp(thread.session?.updatedAt);
 }
 
+/** How long the finished turn took, so a done row keeps the number its
+    Working label was ticking up. Counts from the same anchor the live label
+    used (start, or request time when the turn was never adopted) to
+    completion. Null when the turn is still running or either end is missing
+    or malformed — a done row without a duration just drops the suffix. */
+export function resolveCompletedTurnDurationMs(
+  thread: Pick<SidebarThreadSummary, "latestTurn">,
+): number | null {
+  const turn = thread.latestTurn;
+  if (!turn || turn.completedAt === null) return null;
+  const completedMs = Date.parse(turn.completedAt);
+  if (Number.isNaN(completedMs)) return null;
+  const startedAt = firstValidTimestamp(turn.startedAt, turn.requestedAt);
+  if (startedAt === null) return null;
+  const elapsedMs = completedMs - Date.parse(startedAt);
+  // Clock skew between the turn's two stamps can invert them; a negative
+  // duration is noise, not a zero-length turn.
+  return elapsedMs < 0 ? null : elapsedMs;
+}
+
 export function formatWorkingDurationLabel(elapsedMs: number): string {
   const seconds = Number.isFinite(elapsedMs) ? Math.max(0, Math.floor(elapsedMs / 1000)) : 0;
   if (seconds < 60) return `${seconds}s`;
