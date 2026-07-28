@@ -145,7 +145,9 @@ export const writeProviderStatusCache = (input: {
   readonly filePath: string;
   readonly provider: ServerProvider;
 }) => {
-  const { updateState: _updateState, ...cacheableProvider } = input.provider;
+  // `usage` is live account rate-limit state; persisting it would only ever
+  // resurface stale numbers on the next boot.
+  const { updateState: _updateState, usage: _usage, ...cacheableProvider } = input.provider;
   return writeFileStringAtomically({
     filePath: input.filePath,
     contents: `${JSON.stringify(cacheableProvider, null, 2)}\n`,

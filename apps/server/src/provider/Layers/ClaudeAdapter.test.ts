@@ -37,6 +37,7 @@ import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderAdapterProcessError, ProviderAdapterValidationError } from "../Errors.ts";
 import type { ClaudeAdapterShape } from "../Services/ClaudeAdapter.ts";
+import { makeProviderUsageStore } from "../providerUsage.ts";
 import { makeClaudeAdapter, type ClaudeAdapterLiveOptions } from "./ClaudeAdapter.ts";
 const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
 
@@ -59,6 +60,8 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   public readonly setMaxThinkingTokensCalls: Array<number | null> = [];
   public closeCalls = 0;
   public closeError: unknown | undefined;
+  /** Response for the experimental usage control request; undefined = no data. */
+  public usageResponse: unknown;
 
   emit(message: SDKMessage): void {
     if (this.done) {
@@ -105,6 +108,13 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   readonly setMaxThinkingTokens = async (maxThinkingTokens: number | null): Promise<void> => {
     this.setMaxThinkingTokensCalls.push(maxThinkingTokens);
   };
+
+  // Deliberately a prototype method rather than a bound arrow property: the
+  // SDK's query methods read `this`, so a caller that drops the receiver must
+  // fail here exactly as it does against the real SDK.
+  async usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET(): Promise<unknown> {
+    return this.usageResponse;
+  }
 
   readonly close = (): void => {
     this.closeCalls += 1;
@@ -155,6 +165,7 @@ function makeHarness(config?: {
   readonly baseDir?: string;
   readonly claudeConfig?: Partial<ClaudeSettings>;
   readonly instanceId?: ProviderInstanceId;
+  readonly usageStore?: ClaudeAdapterLiveOptions["usageStore"];
 }) {
   const query = new FakeClaudeQuery();
   let createInput:
@@ -166,6 +177,7 @@ function makeHarness(config?: {
 
   const adapterOptions: ClaudeAdapterLiveOptions = {
     ...(config?.instanceId ? { instanceId: config.instanceId } : {}),
+    ...(config?.usageStore ? { usageStore: config.usageStore } : {}),
     createQuery: (input) => {
       createInput = input;
       return query;
@@ -5142,5 +5154,72 @@ describe("ClaudeAdapterLive", () => {
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
     );
+  });
+
+  it.effect("tees subscription rate-limit usage into the usage store", () => {
+    const usageStore = Effect.runSync(makeProviderUsageStore);
+    const harness = makeHarness({ usageStore });
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      harness.query.usageResponse = {
+        subscription_type: "max",
+        rate_limits_available: true,
+        rate_limits: {
+          five_hour: { utilization: 10, resets_at: "2026-07-20T15:00:00Z" },
+          seven_day: { utilization: 30, resets_at: "2026-07-24T00:00:00Z" },
+        },
+      };
+
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        modelSelection: {
+          instanceId: ProviderInstanceId.make("claudeAgent"),
+          model: "claude-sonnet-4-5",
+        },
+        runtimeMode: "full-access",
+      });
+
+      // The session-start pull runs on a detached fiber; wait until the full
+      // snapshot lands (the session window only ever comes from the pull).
+      const primed = yield* usageStore.changes.pipe(
+        Stream.filter(
+          (usage) => usage?.windows.some((window) => window.kind === "session") === true,
+        ),
+        Stream.take(1),
+        Stream.runCollect,
+      );
+      assert.equal(Array.from(primed)[0]?.planLabel, "max");
+
+      harness.query.emit({
+        type: "rate_limit_event",
+        session_id: "sdk-session-1",
+        uuid: "rate-limit-1",
+        rate_limit_info: {
+          status: "allowed",
+          rateLimitType: "seven_day",
+          utilization: 62,
+          resetsAt: 1_784_851_200,
+        },
+      } as unknown as SDKMessage);
+
+      // Push events merge per window: weekly updates, session survives.
+      yield* usageStore.changes.pipe(
+        Stream.filter(
+          (usage) =>
+            usage?.windows.some(
+              (window) => window.kind === "weekly" && window.usedPercent === 62,
+            ) === true,
+        ),
+        Stream.take(1),
+        Stream.runDrain,
+      );
+
+      const usage = yield* usageStore.get;
+      assert.equal(usage?.windows.find((window) => window.kind === "session")?.usedPercent, 10);
+      const weekly = usage?.windows.find((window) => window.kind === "weekly");
+      assert.equal(weekly?.usedPercent, 62);
+      assert.equal(weekly?.resetsAt, "2026-07-24T00:00:00.000Z");
+    }).pipe(Effect.provide(harness.layer));
   });
 });
