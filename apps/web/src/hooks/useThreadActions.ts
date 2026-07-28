@@ -28,6 +28,7 @@ import {
   readThreadShell,
 } from "../state/entities";
 import { useTerminalUiStateStore } from "../terminalUiStateStore";
+import { useThreadTodosStore } from "../threadTodosStore";
 import { buildThreadRouteParams, resolveThreadRouteRef } from "../threadRoutes";
 import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../worktreeCleanup";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
@@ -131,6 +132,7 @@ export function useThreadActions() {
     (store) => store.clearProjectDraftThreadById,
   );
   const clearTerminalUiState = useTerminalUiStateStore((state) => state.clearTerminalUiState);
+  const removeThreadTodos = useThreadTodosStore((state) => state.removeThread);
   const router = useRouter();
   const handleNewThread = useNewThreadHandler();
   // Keep a ref so archiveThread can call handleNewThread without appearing in
@@ -314,6 +316,7 @@ export function useThreadActions() {
         threadRef,
       );
       clearTerminalUiState(threadRef);
+      removeThreadTodos(threadRef);
 
       if (shouldNavigateToFallback) {
         if (fallbackThreadId) {
@@ -404,6 +407,7 @@ export function useThreadActions() {
       deleteThreadMutation,
       getCurrentRouteThreadRef,
       refreshVcsStatus,
+      removeThreadTodos,
       removeWorktree,
       router,
       resolveThreadTarget,
