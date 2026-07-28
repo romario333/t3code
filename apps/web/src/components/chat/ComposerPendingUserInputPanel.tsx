@@ -1,4 +1,4 @@
-import { type ApprovalRequestId } from "@t3tools/contracts";
+import { type ApprovalRequestId, type UserInputQuestion } from "@t3tools/contracts";
 import { memo, useEffect, useEffectEvent, useRef, useState } from "react";
 import { type PendingUserInput } from "../../session-logic";
 import {
@@ -61,14 +61,28 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
   const activeQuestion = progress.activeQuestion;
   const autoAdvanceTimerRef = useRef<number | null>(null);
   const onAdvanceRef = useRef(onAdvance);
+  const onToggleOptionRef = useRef(onToggleOption);
+  const activeQuestionIdRef = useRef(activeQuestion?.id ?? null);
   const [optimisticSingleSelect, setOptimisticSingleSelect] = useState<{
     questionId: string;
     optionLabel: string;
   } | null>(null);
 
+  // Values captured by `handleOptionSelection` go through refs rather than the
+  // closure: under the React Compiler an effect event can keep running with an
+  // earlier render's captures, which previously made a multi-select question
+  // take the single-select auto-advance path (see the questionId argument).
   useEffect(() => {
     onAdvanceRef.current = onAdvance;
   }, [onAdvance]);
+
+  useEffect(() => {
+    onToggleOptionRef.current = onToggleOption;
+  }, [onToggleOption]);
+
+  useEffect(() => {
+    activeQuestionIdRef.current = activeQuestion?.id ?? null;
+  }, [activeQuestion?.id]);
 
   useEffect(() => {
     if (!activeQuestion || activeQuestion.multiSelect || !optimisticSingleSelect) {
@@ -100,21 +114,34 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
     };
   }, []);
 
-  const handleOptionSelection = useEffectEvent((questionId: string, optionLabel: string) => {
-    if (activeQuestion?.multiSelect) {
-      onToggleOption(questionId, optionLabel);
-      return;
-    }
-    setOptimisticSingleSelect({ questionId, optionLabel });
-    onToggleOption(questionId, optionLabel);
-    if (autoAdvanceTimerRef.current !== null) {
-      window.clearTimeout(autoAdvanceTimerRef.current);
-    }
-    autoAdvanceTimerRef.current = window.setTimeout(() => {
-      autoAdvanceTimerRef.current = null;
-      onAdvanceRef.current();
-    }, 200);
-  });
+  // `question` is passed in by the caller instead of read from `activeQuestion`
+  // so the multi-select branch is decided from the question the user actually
+  // clicked. Deciding it from the closure let a stale render leak through and
+  // auto-advance (and, on the last question, submit) a multi-select question on
+  // the first option click.
+  const handleOptionSelection = useEffectEvent(
+    (question: UserInputQuestion, optionLabel: string) => {
+      const questionId = question.id;
+      if (question.multiSelect) {
+        onToggleOptionRef.current(questionId, optionLabel);
+        return;
+      }
+      setOptimisticSingleSelect({ questionId, optionLabel });
+      onToggleOptionRef.current(questionId, optionLabel);
+      if (autoAdvanceTimerRef.current !== null) {
+        window.clearTimeout(autoAdvanceTimerRef.current);
+      }
+      autoAdvanceTimerRef.current = window.setTimeout(() => {
+        autoAdvanceTimerRef.current = null;
+        // Only advance while the answered question is still the one on screen,
+        // so a queued advance can never skip or submit a different question.
+        if (activeQuestionIdRef.current !== questionId) {
+          return;
+        }
+        onAdvanceRef.current();
+      }, 200);
+    },
+  );
 
   // Keyboard shortcut: number keys 1-9 select corresponding options when focus is
   // outside editable fields. Multi-select prompts toggle options in place; single-
@@ -140,7 +167,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
       const option = activeQuestion.options[optionIndex];
       if (!option) return;
       event.preventDefault();
-      handleOptionSelection(activeQuestion.id, option.label);
+      handleOptionSelection(activeQuestion, option.label);
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
@@ -213,7 +240,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
               type="button"
               disabled={isResponding}
               onClick={() => {
-                handleOptionSelection(activeQuestion.id, option.label);
+                handleOptionSelection(activeQuestion, option.label);
               }}
               className={className}
             >
