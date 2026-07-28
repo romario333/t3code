@@ -104,6 +104,7 @@ import {
 } from "./composerProviderState";
 import { ContextWindowMeter } from "./ContextWindowMeter";
 import { resolveContextWindowModelDisplayName } from "./ContextWindowMeter.logic";
+import { ProviderUsageMeter } from "./ProviderUsageMeter";
 import { buildExpandedImagePreview, type ExpandedImagePreview } from "./ExpandedImagePreview";
 import { basenameOfPath } from "../../pierre-icons";
 import { cn, randomUUID } from "~/lib/utils";
@@ -227,6 +228,7 @@ import type { SessionPhase, Thread } from "../../types";
 import type { PendingUserInputDraftAnswer } from "../../pendingUserInput";
 import type { PendingApproval, PendingUserInput } from "../../session-logic";
 import { deriveLatestContextWindowSnapshot } from "../../lib/contextWindow";
+import { deriveProviderUsageDisplay, type ProviderUsageDisplay } from "../../lib/providerUsage";
 import { formatProviderSkillDisplayName } from "../../providerSkillPresentation";
 import { searchProviderSkills } from "../../providerSkillSearch";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
@@ -395,6 +397,9 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   compact: boolean;
   activeContextWindow: ReturnType<typeof deriveLatestContextWindowSnapshot>;
   activeThreadModelDisplayName: string | null;
+  activeProviderUsage: ProviderUsageDisplay | null;
+  /** Follows the composer's selected instance, not the thread's. */
+  selectedProviderDisplayName: string | null;
   isPreparingWorktree: boolean;
   pendingAction: {
     questionIndex: number;
@@ -423,6 +428,12 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
         <ContextWindowMeter
           usage={props.activeContextWindow}
           modelDisplayName={props.activeThreadModelDisplayName}
+        />
+      ) : null}
+      {props.activeProviderUsage ? (
+        <ProviderUsageMeter
+          usage={props.activeProviderUsage}
+          providerDisplayName={props.selectedProviderDisplayName}
         />
       ) : null}
       {props.isPreparingWorktree ? (
@@ -932,6 +943,20 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     () => resolveContextWindowModelDisplayName(activeThreadModelSelection, modelOptionsByInstance),
     [activeThreadModelSelection, modelOptionsByInstance],
   );
+  // Subscription usage is account state for the instance that will run the
+  // *next* turn, so it follows the composer's selection rather than the
+  // thread's persisted one — on a fresh thread the two differ until the first
+  // turn lands, and the meter must not report another provider's account.
+  const activeProviderUsage = useMemo(() => {
+    if (!selectedProviderEntry) return null;
+    // Subscription usage is only surfaced for Claude and Codex ("gpt").
+    const driver = selectedProviderEntry.driverKind;
+    if (driver !== "claudeAgent" && driver !== "claude" && driver !== "codex") {
+      return null;
+    }
+    return deriveProviderUsageDisplay(selectedProviderEntry.snapshot.usage);
+  }, [selectedProviderEntry]);
+  const selectedProviderDisplayName = selectedProviderEntry?.displayName ?? null;
 
   // ------------------------------------------------------------------
   // Composer-local state
@@ -3215,6 +3240,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   compact={isComposerPrimaryActionsCompact}
                   activeContextWindow={activeContextWindow}
                   activeThreadModelDisplayName={activeThreadModelDisplayName}
+                  activeProviderUsage={activeProviderUsage}
+                  selectedProviderDisplayName={selectedProviderDisplayName}
                   pendingAction={pendingPrimaryAction}
                   isRunning={phase === "running"}
                   showPlanFollowUpPrompt={pendingUserInputs.length === 0 && showPlanFollowUpPrompt}
