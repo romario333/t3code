@@ -70,7 +70,11 @@ export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   mainWindowBounds: null,
   mainWindowMaximized: false,
   serverExposureMode: "local-only",
-  tailscaleServeEnabled: false,
+  // FORK: Tailscale Serve is on by default in this fork's desktop builds.
+  // serverExposureMode deliberately stays "local-only" — the backend keeps
+  // binding 127.0.0.1 and Tailscale Serve fronts it on the tailnet only, so
+  // the only listener facing the network is tailscaled (governed by ACLs).
+  tailscaleServeEnabled: true,
   tailscaleServePort: DEFAULT_TAILSCALE_SERVE_PORT,
   updateChannel: "latest",
   updateChannelConfiguredByUser: false,
@@ -220,7 +224,13 @@ function normalizeDesktopSettingsDocument(
     mainWindowMaximized: mainWindowBounds !== null && parsed.mainWindowMaximized === true,
     serverExposureMode:
       parsed.serverExposureMode === "network-accessible" ? "network-accessible" : "local-only",
-    tailscaleServeEnabled: parsed.tailscaleServeEnabled === true,
+    // FORK: an ABSENT key means "not configured" and must fall back to the
+    // fork default (true). Sparse persistence (toDesktopSettingsDocument,
+    // below) only writes non-default values, so upstream's `=== true` would
+    // pin every existing desktop-settings.json to false and defeat the flip.
+    // An explicit `false` still wins and is now written to disk, so an
+    // opt-out sticks across restarts.
+    tailscaleServeEnabled: parsed.tailscaleServeEnabled ?? defaultSettings.tailscaleServeEnabled,
     tailscaleServePort: normalizeTailscaleServePort(parsed.tailscaleServePort),
     updateChannel: updateChannelConfiguredByUser
       ? Option.getOrElse(parsedUpdateChannel, () => defaultSettings.updateChannel)
