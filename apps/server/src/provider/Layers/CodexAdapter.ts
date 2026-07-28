@@ -26,6 +26,7 @@ import {
   ThreadId,
   ProviderSendTurnInput,
 } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Crypto from "effect/Crypto";
 import * as Exit from "effect/Exit";
@@ -52,6 +53,11 @@ import {
   type ProviderAdapterError,
 } from "../Errors.ts";
 import { type CodexAdapterShape } from "../Services/CodexAdapter.ts";
+import {
+  type CodexRateLimitSnapshotLike,
+  normalizeCodexRateLimits,
+  type ProviderUsageStore,
+} from "../providerUsage.ts";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import {
@@ -85,6 +91,7 @@ export interface CodexAdapterLiveOptions {
   >;
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
+  readonly usageStore?: ProviderUsageStore;
 }
 
 interface CodexAdapterSessionContext {
@@ -1642,6 +1649,25 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
   const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
   const sessions = new Map<ThreadId, CodexAdapterSessionContext>();
 
+  const applyCodexRateLimits = Effect.fn("applyCodexRateLimits")(function* (
+    rateLimits: CodexRateLimitSnapshotLike,
+    applyOptions?: { readonly replace?: boolean },
+  ) {
+    const usageStore = options?.usageStore;
+    if (!usageStore) {
+      return;
+    }
+    const now = DateTime.formatIso(yield* DateTime.now);
+    const result = normalizeCodexRateLimits(rateLimits, now);
+    if (!result) {
+      return;
+    }
+    yield* usageStore.applyWindows(result.windows, {
+      ...(result.planLabel !== undefined ? { planLabel: result.planLabel } : {}),
+      ...(applyOptions?.replace === true ? { replace: true } : {}),
+    });
+  });
+
   const startSession: CodexAdapterShape["startSession"] = (input) =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -1718,6 +1744,17 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         const eventFiber = yield* Stream.runForEach(runtime.events, (event) =>
           Effect.gen(function* () {
             yield* writeNativeEvent(event);
+            if (event.method === "account/rateLimits/updated") {
+              const payload = readPayload(
+                EffectCodexSchema.V2AccountRateLimitsUpdatedNotification,
+                event.payload,
+              );
+              if (payload) {
+                // Sparse rolling update: merge into the last full snapshot
+                // (per the app-server schema's own merge semantics).
+                yield* applyCodexRateLimits(payload.rateLimits);
+              }
+            }
             const runtimeEvents = mapToRuntimeEvents(event, event.threadId);
             if (runtimeEvents.length === 0) {
               yield* Effect.logDebug("ignoring unhandled Codex provider event", {
@@ -1759,6 +1796,18 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           stopped: false,
         });
         sessionScopeTransferred = true;
+
+        // Prime account rate-limit usage with a full snapshot: the sparse
+        // `account/rateLimits/updated` notifications merge into this base.
+        // Best-effort — API-key auth has no subscription limits and the
+        // request may fail.
+        yield* runtime.readAccountRateLimits.pipe(
+          Effect.flatMap((response) =>
+            applyCodexRateLimits(response.rateLimits, { replace: true }),
+          ),
+          Effect.ignore,
+          Effect.forkIn(sessionScope),
+        );
 
         return started;
       }),

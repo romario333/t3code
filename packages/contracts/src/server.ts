@@ -61,6 +61,36 @@ export const ServerProviderAuth = Schema.Struct({
 });
 export type ServerProviderAuth = typeof ServerProviderAuth.Type;
 
+export const ServerProviderUsageWindowKind = Schema.Literals(["session", "weekly"]);
+export type ServerProviderUsageWindowKind = typeof ServerProviderUsageWindowKind.Type;
+
+/**
+ * One subscription rate-limit window (e.g. Claude's 5-hour or weekly
+ * limit, Codex's primary/secondary window). `usedPercent` may reach or
+ * exceed 100 when the limit is hit.
+ */
+export const ServerProviderUsageWindow = Schema.Struct({
+  kind: ServerProviderUsageWindowKind,
+  // Set for model-specific weekly caps (e.g. "opus", "fable"); absent for
+  // the account-wide window.
+  modelSlug: Schema.optional(TrimmedNonEmptyString),
+  usedPercent: Schema.Number,
+  resetsAt: Schema.NullOr(IsoDateTime),
+  // 300 = 5h, 10080 = weekly; null when the provider doesn't report it.
+  windowDurationMins: Schema.NullOr(Schema.Number),
+  limitReached: Schema.optional(Schema.Boolean),
+  // Per-window because push updates may carry a single window at a time.
+  updatedAt: IsoDateTime,
+});
+export type ServerProviderUsageWindow = typeof ServerProviderUsageWindow.Type;
+
+export const ServerProviderUsage = Schema.Struct({
+  windows: Schema.Array(ServerProviderUsageWindow),
+  planLabel: Schema.optional(TrimmedNonEmptyString),
+  updatedAt: IsoDateTime,
+});
+export type ServerProviderUsage = typeof ServerProviderUsage.Type;
+
 export const ServerProviderModel = Schema.Struct({
   slug: TrimmedNonEmptyString,
   name: TrimmedNonEmptyString,
@@ -194,6 +224,7 @@ export const ServerProvider = Schema.Struct({
   skills: Schema.Array(ServerProviderSkill).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   versionAdvisory: Schema.optionalKey(ServerProviderVersionAdvisory),
   updateState: Schema.optionalKey(ServerProviderUpdateState),
+  usage: Schema.optionalKey(ServerProviderUsage),
 });
 export type ServerProvider = typeof ServerProvider.Type;
 
