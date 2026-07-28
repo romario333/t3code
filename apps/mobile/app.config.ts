@@ -9,12 +9,18 @@ const repoEnv = loadRepoEnv();
 Object.assign(process.env, repoEnv);
 
 const APP_VARIANT = resolveAppVariant(repoEnv.APP_VARIANT);
-const isIosPersonalTeamBuild = repoEnv.T3CODE_IOS_PERSONAL_TEAM === "1";
 const runtimeVersionPolicy =
   process.env.MOBILE_VERSION_POLICY ??
   (APP_VARIANT === "development" ? "appVersion" : "fingerprint");
 
-const personalTeamBundleIdentifier = repoEnv.T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID?.trim();
+// FORK: this fork always builds reduced-capability and self-signed by default —
+// no env vars needed. Set T3CODE_IOS_PERSONAL_TEAM=0 to restore the upstream
+// full-capability build (upstream team, upstream bundle IDs, OTA updates on).
+const isIosPersonalTeamBuild = (repoEnv.T3CODE_IOS_PERSONAL_TEAM ?? "1") === "1";
+
+const FORK_IOS_BUNDLE_IDENTIFIER = "com.phottr.t3code";
+const personalTeamBundleIdentifier =
+  repoEnv.T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID?.trim() || FORK_IOS_BUNDLE_IDENTIFIER;
 const IOS_BUNDLE_IDENTIFIER_PATTERN = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
 
 // Compiled into the native project. Without a relay, Observe's native side could dispatch to
@@ -22,6 +28,13 @@ const IOS_BUNDLE_IDENTIFIER_PATTERN = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
 const observeEndpointUrl = repoEnv.T3CODE_RELAY_URL?.trim()
   ? new URL("/v1/mobile/observe", repoEnv.T3CODE_RELAY_URL.trim()).toString()
   : "https://observe.invalid";
+
+// FORK: Apple team ID for code signing. Defaults to the fork's own team so a
+// plain checkout signs locally built device apps; T3CODE_IOS_TEAM_ID overrides.
+// A T3CODE_IOS_PERSONAL_TEAM=0 build falls back to the upstream T3 Tools team,
+// since the fork's team cannot sign the full-capability entitlements anyway.
+const DEFAULT_IOS_TEAM_ID = isIosPersonalTeamBuild ? "59SZ26S92T" : "ARK85ZXQ4Z";
+const iosTeamId = repoEnv.T3CODE_IOS_TEAM_ID?.trim() || DEFAULT_IOS_TEAM_ID;
 
 const fromRepoRoot = (relativePath: string) => `../../${relativePath}`;
 const androidAdaptiveForeground = "./assets/android-icon-foreground.png";
@@ -235,7 +248,11 @@ const config: ExpoConfig = {
   icon: variant.assets.appIcon,
   userInterfaceStyle: "automatic",
   updates: {
-    enabled: repoEnv.T3CODE_MOBILE_UPDATES_ENABLED !== "0",
+    // FORK: a self-signed fork build must never pull OTA JS from upstream's
+    // Expo channel — it would silently replace this build's own bundle on
+    // first launch. The reduced-capability switch is the reliable marker for
+    // "built locally against a team that is not T3 Tools".
+    enabled: !isIosPersonalTeamBuild && repoEnv.T3CODE_MOBILE_UPDATES_ENABLED !== "0",
     url: "https://u.expo.dev/d763fcb8-d37c-41ea-a773-b54a0ab4a454",
     checkAutomatically: "ON_LOAD",
     fallbackToCacheTimeout: 0,
@@ -246,7 +263,9 @@ const config: ExpoConfig = {
     requireFullScreen: process.env.T3_SHOWCASE_CAPTURE_BUILD === "1",
     bundleIdentifier: iosBundleIdentifier,
     // Avoid Personal Team fallback: it cannot sign App Groups, Apple sign-in or push entitlements.
-    appleTeamId: "ARK85ZXQ4Z",
+    // FORK: T3CODE_IOS_TEAM_ID lets a self-built fork sign against its own
+    // Apple Developer team.
+    appleTeamId: iosTeamId,
     associatedDomains: [
       `applinks:${variant.relyingParty}`,
       `webcredentials:${variant.relyingParty}`,
@@ -305,6 +324,10 @@ const config: ExpoConfig = {
     favicon: variant.assets.appIcon,
   },
   plugins: [
+    // FORK: must be FIRST. Entitlement mods run in reverse registration order,
+    // so registered last it ran before expo-notifications and the base mod added
+    // their entitlements and stripped nothing. Registered first, it runs last.
+    ...(isIosPersonalTeamBuild ? ["./plugins/withoutIosPersonalTeamCapabilities.cjs"] : []),
     "expo-asset",
     "react-native-pdf-jsi",
     [
@@ -432,7 +455,6 @@ const config: ExpoConfig = {
     "./plugins/withAndroidModernAlertDialog.cjs",
     "./plugins/withAndroidPredictiveBackCompat.cjs",
     "./plugins/withAndroidTabletOrientation.cjs",
-    ...(isIosPersonalTeamBuild ? ["./plugins/withoutIosPersonalTeamCapabilities.cjs"] : []),
   ],
   extra: {
     appVariant: APP_VARIANT,
