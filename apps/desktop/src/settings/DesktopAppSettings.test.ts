@@ -3,6 +3,7 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import * as DesktopConfig from "../app/DesktopConfig.ts";
@@ -242,7 +243,7 @@ describe("DesktopSettings", () => {
           mainWindowBounds: null,
           mainWindowMaximized: false,
           serverExposureMode: "local-only",
-          tailscaleServeEnabled: false,
+          tailscaleServeEnabled: true,
           tailscaleServePort: 443,
           updateChannel: "nightly",
           updateChannelConfiguredByUser: false,
@@ -271,7 +272,7 @@ describe("DesktopSettings", () => {
           mainWindowBounds: null,
           mainWindowMaximized: false,
           serverExposureMode: "local-only",
-          tailscaleServeEnabled: false,
+          tailscaleServeEnabled: true,
           tailscaleServePort: 443,
           updateChannel: "latest",
           updateChannelConfiguredByUser: true,
@@ -281,6 +282,60 @@ describe("DesktopSettings", () => {
         } satisfies DesktopAppSettings.DesktopSettings);
       }),
       { appVersion: "0.0.17-nightly.20260415.1" },
+    ),
+  );
+
+  // FORK: Tailscale Serve defaults on. These three cover the round-trip that
+  // makes the flipped default work with sparse persistence: an absent key
+  // means "not configured" and resolves to the default, while an explicit
+  // opt-out differs from the default and is therefore written to disk.
+  it.effect("defaults Tailscale Serve on when the persisted document omits the key", () =>
+    withSettings(
+      Effect.gen(function* () {
+        const settings = yield* DesktopAppSettings.DesktopAppSettings;
+        yield* writeSettingsPatch({ serverExposureMode: "local-only" });
+
+        const loaded = yield* settings.load;
+        assert.isTrue(loaded.tailscaleServeEnabled);
+        assert.equal(loaded.tailscaleServePort, 443);
+      }),
+    ),
+  );
+
+  it.effect("keeps an explicit Tailscale Serve opt-out", () =>
+    withSettings(
+      Effect.gen(function* () {
+        const settings = yield* DesktopAppSettings.DesktopAppSettings;
+        yield* writeSettingsPatch({ tailscaleServeEnabled: false });
+
+        assert.isFalse((yield* settings.load).tailscaleServeEnabled);
+      }),
+    ),
+  );
+
+  it.effect("persists an explicit Tailscale Serve opt-out to disk", () =>
+    withSettings(
+      Effect.gen(function* () {
+        const environment = yield* DesktopEnvironment.DesktopEnvironment;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const settings = yield* DesktopAppSettings.DesktopAppSettings;
+
+        const disabled = yield* settings.setTailscaleServe({
+          enabled: false,
+          port: Option.none(),
+        });
+        assert.isTrue(disabled.changed);
+        assert.isFalse(disabled.settings.tailscaleServeEnabled);
+
+        const persisted = yield* decodeDesktopSettingsPatch(
+          yield* fileSystem.readFileString(environment.desktopSettingsPath),
+        );
+        assert.deepEqual(persisted, {
+          tailscaleServeEnabled: false,
+        } satisfies typeof DesktopSettingsPatch.Type);
+
+        assert.isFalse((yield* settings.load).tailscaleServeEnabled);
+      }),
     ),
   );
 
