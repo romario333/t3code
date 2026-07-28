@@ -50,6 +50,36 @@ Build and install a self-contained Release app that does not need Metro:
 vp run ios:release
 ```
 
+### Fork builds signed with your own Apple team
+
+A self-built fork cannot use the upstream bundle identifiers (`com.t3tools.t3code*`
+are registered to T3 Tools) and must not sign against the upstream team. Set these
+in the repository-root `.env.local`:
+
+```bash
+T3CODE_IOS_PERSONAL_TEAM=1
+T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID=com.example.t3code
+T3CODE_IOS_TEAM_ID=YOURTEAMID
+```
+
+- `T3CODE_IOS_TEAM_ID` is your 10-character Apple Developer team ID. When unset,
+  builds sign against the upstream team exactly as before.
+- `T3CODE_IOS_PERSONAL_TEAM=1` is a reduced-capability switch, not a
+  Personal-Team-only switch. It is worth setting even on a paid account for a
+  first build: it drops the widget and share extensions, the push entitlement,
+  and native Sign in with Apple, which removes all App Group and push
+  provisioning work. None of them are needed to pair with a local T3 backend.
+- Setting it also disables Expo OTA updates for the build, so a fork build never
+  pulls JavaScript from upstream's Expo channel and silently replaces its own
+  bundle on first launch.
+
+Then build straight to a plugged-in device (developer mode enabled, device
+trusted):
+
+```bash
+vp run ios:device
+```
+
 The Personal Team equivalent also needs a unique bundle identifier:
 
 ```bash
