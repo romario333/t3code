@@ -6,7 +6,8 @@ import assetLinks from "../web/public/.well-known/assetlinks.json";
 
 // Keep config parsing independent of local env files and build credentials.
 vi.mock("../../scripts/lib/public-config.ts", () => ({
-  loadRepoEnv: () => ({ APP_VARIANT: process.env.APP_VARIANT }),
+  // FORK: check the upstream-ID build; the fork defaults to a self-signed one.
+  loadRepoEnv: () => ({ APP_VARIANT: process.env.APP_VARIANT, T3CODE_IOS_PERSONAL_TEAM: "0" }),
 }));
 
 afterEach(() => {
