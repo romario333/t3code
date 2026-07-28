@@ -14,12 +14,14 @@
  */
 import { ClaudeSettings, ProviderDriverKind, type ServerProvider } from "@t3tools/contracts";
 import * as Cache from "effect/Cache";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import { HttpClient } from "effect/unstable/http";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
@@ -31,9 +33,15 @@ import { ProviderDriverError } from "../Errors.ts";
 import { makeClaudeAdapter } from "../Layers/ClaudeAdapter.ts";
 import {
   checkClaudeProviderStatus,
+  type ClaudeCapabilitiesProbe,
   makePendingClaudeProvider,
   probeClaudeCapabilities,
 } from "../Layers/ClaudeProvider.ts";
+import {
+  attachUsageOnChange,
+  makeProviderUsageStore,
+  normalizeClaudeUsageReadResponse,
+} from "../providerUsage.ts";
 import { ProviderEventLoggers } from "../Layers/ProviderEventLoggers.ts";
 import { resolveClaudeModelCatalog } from "../ClaudeModelCatalog.ts";
 import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
@@ -148,10 +156,30 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
         continuationGroupKey,
       });
 
+      const usageStore = yield* makeProviderUsageStore;
+      const applyProbeUsage = (probe: ClaudeCapabilitiesProbe | undefined) =>
+        Effect.gen(function* () {
+          if (probe?.rateLimitUsage === undefined) {
+            return;
+          }
+          const now = DateTime.formatIso(yield* DateTime.now);
+          const result = normalizeClaudeUsageReadResponse(probe.rateLimitUsage, now);
+          if (result === "unavailable") {
+            return yield* usageStore.clear;
+          }
+          if (result) {
+            yield* usageStore.applyWindows(result.windows, {
+              ...(result.planLabel !== undefined ? { planLabel: result.planLabel } : {}),
+              replace: true,
+            });
+          }
+        });
+
       const adapterOptions = {
         instanceId,
         environment: processEnv,
         modelCatalog,
+        usageStore,
         ...(eventLoggers.native ? { nativeEventLogger: eventLoggers.native } : {}),
       };
       const adapter = yield* makeClaudeAdapter(effectiveConfig, adapterOptions);
@@ -169,6 +197,10 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
         lookup: () =>
           probeClaudeCapabilities(effectiveConfig, processEnv, cwd).pipe(
             Effect.provideService(Path.Path, path),
+            // The probe reads account rate-limit usage alongside capability
+            // metadata; tee it into the usage store so the meter has data
+            // before the first turn.
+            Effect.tap(applyProbeUsage),
           ),
       });
       const capabilitiesCacheKey = yield* makeClaudeCapabilitiesCacheKey(effectiveConfig, cwd);
@@ -209,13 +241,36 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
             Effect.map(stampIdentity),
           ),
         checkProvider,
-        enrichSnapshot: ({ settings, snapshot, publishSnapshot }) =>
-          enrichProviderSnapshotWithVersionAdvisory(snapshot, maintenanceCapabilities, {
-            enableProviderUpdateChecks: settings.enableProviderUpdateChecks,
-          }).pipe(
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-            Effect.flatMap((enrichedSnapshot) => publishSnapshot(enrichedSnapshot)),
-          ),
+        enrichSnapshot: ({ settings, snapshot, getSnapshot, publishSnapshot }) =>
+          Effect.gen(function* () {
+            // Both enrichment branches read-modify-write the managed
+            // snapshot; a single permit serializes them so a concurrent
+            // merge is never clobbered by a stale read.
+            const publishLock = yield* Semaphore.make(1);
+            const updateSnapshot = (update: (current: ServerProvider) => ServerProvider) =>
+              publishLock.withPermits(1)(
+                getSnapshot.pipe(Effect.map(update), Effect.flatMap(publishSnapshot)),
+              );
+            yield* Effect.all(
+              [
+                enrichProviderSnapshotWithVersionAdvisory(snapshot, maintenanceCapabilities, {
+                  enableProviderUpdateChecks: settings.enableProviderUpdateChecks,
+                }).pipe(
+                  Effect.provideService(HttpClient.HttpClient, httpClient),
+                  // Merge only the advisory onto the latest snapshot.
+                  Effect.flatMap((enrichedSnapshot) =>
+                    updateSnapshot((current) =>
+                      enrichedSnapshot.versionAdvisory
+                        ? { ...current, versionAdvisory: enrichedSnapshot.versionAdvisory }
+                        : current,
+                    ),
+                  ),
+                ),
+                attachUsageOnChange({ usageStore, updateSnapshot }),
+              ],
+              { concurrency: "unbounded" },
+            );
+          }),
       }).pipe(
         Effect.mapError(
           (cause) =>
