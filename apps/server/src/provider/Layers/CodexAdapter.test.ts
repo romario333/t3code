@@ -34,11 +34,13 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import * as CodexErrors from "effect-codex-app-server/errors";
+import type * as EffectCodexSchema from "effect-codex-app-server/schema";
 
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderAdapterValidationError } from "../Errors.ts";
 import type { CodexAdapterShape } from "../Services/CodexAdapter.ts";
+import { makeProviderUsageStore, type ProviderUsageStore } from "../providerUsage.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
 import {
   type CodexSessionRuntimeOptions,
@@ -118,6 +120,11 @@ class FakeCodexRuntime implements CodexSessionRuntimeShape {
       Promise.resolve(undefined),
   );
 
+  public readonly readAccountRateLimitsImpl = vi.fn(
+    (): Promise<EffectCodexSchema.V2GetAccountRateLimitsResponse> =>
+      Promise.resolve({ rateLimits: {} }),
+  );
+
   public readonly closeImpl = vi.fn(() => Promise.resolve(undefined));
 
   readonly options: CodexSessionRuntimeOptions;
@@ -157,6 +164,8 @@ class FakeCodexRuntime implements CodexSessionRuntimeShape {
   respondToUserInput(requestId: ApprovalRequestId, answers: ProviderUserInputAnswers) {
     return Effect.promise(() => this.respondToUserInputImpl(requestId, answers));
   }
+
+  readAccountRateLimits = Effect.promise(() => this.readAccountRateLimitsImpl());
 
   get events() {
     return Stream.fromQueue(this.eventQueue);
@@ -1599,3 +1608,108 @@ it.effect("flushes managed native logs when the adapter layer shuts down", () =>
     }
   }),
 );
+
+const usageRuntimeFactory = (() => {
+  const runtimes: Array<FakeCodexRuntime> = [];
+  const factory = vi.fn((options: CodexSessionRuntimeOptions) => {
+    const runtime = new FakeCodexRuntime(options);
+    runtime.readAccountRateLimitsImpl.mockResolvedValue({
+      rateLimits: {
+        planType: "plus",
+        primary: { usedPercent: 20, resetsAt: 1_784_560_800, windowDurationMins: 300 },
+        secondary: { usedPercent: 61, resetsAt: 1_784_851_200, windowDurationMins: 10_080 },
+      },
+    });
+    runtimes.push(runtime);
+    return Effect.succeed(runtime);
+  });
+
+  return {
+    factory,
+    get lastRuntime(): FakeCodexRuntime | undefined {
+      return runtimes.at(-1);
+    },
+  };
+})();
+const usageStoreRef: { current: ProviderUsageStore | undefined } = { current: undefined };
+const usageLayer = it.layer(
+  Layer.effect(
+    CodexAdapter,
+    Effect.gen(function* () {
+      const codexConfig = decodeCodexSettings({});
+      const usageStore = yield* makeProviderUsageStore;
+      usageStoreRef.current = usageStore;
+      return yield* makeCodexAdapter(codexConfig, {
+        makeRuntime: usageRuntimeFactory.factory,
+        usageStore,
+      });
+    }),
+  ).pipe(
+    Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
+    Layer.provideMerge(ServerSettingsService.layerTest()),
+    Layer.provideMerge(providerSessionDirectoryTestLayer),
+    Layer.provideMerge(NodeServices.layer),
+  ),
+);
+
+usageLayer("CodexAdapterLive usage", (it) => {
+  it.effect("primes usage at session start and merges sparse rate-limit updates", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CodexAdapter;
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("codex"),
+        threadId: asThreadId("thread-usage"),
+        runtimeMode: "full-access",
+      });
+      const runtime = usageRuntimeFactory.lastRuntime;
+      NodeAssert.ok(runtime);
+      const usageStore = usageStoreRef.current;
+      NodeAssert.ok(usageStore);
+
+      // The session-start pull runs on a session-scoped fiber; wait for it.
+      const primed = yield* usageStore.changes.pipe(
+        Stream.filter((usage) => usage !== undefined),
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.map((collected) => Array.from(collected)[0]),
+      );
+      NodeAssert.equal(primed?.planLabel, "plus");
+      NodeAssert.deepStrictEqual(
+        primed?.windows.map((window) => window.kind),
+        ["session", "weekly"],
+      );
+
+      // Sparse notification: only the weekly window changes.
+      yield* runtime.emit({
+        id: asEventId("evt-rate-limits"),
+        kind: "notification",
+        provider: ProviderDriverKind.make("codex"),
+        threadId: asThreadId("thread-usage"),
+        createdAt: "2026-01-01T00:00:00.000Z",
+        method: "account/rateLimits/updated",
+        payload: {
+          rateLimits: {
+            secondary: { usedPercent: 75, resetsAt: 1_784_851_200, windowDurationMins: 10_080 },
+          },
+        },
+      } satisfies ProviderEvent);
+
+      yield* usageStore.changes.pipe(
+        Stream.filter(
+          (usage) =>
+            usage?.windows.some(
+              (window) => window.kind === "weekly" && window.usedPercent === 75,
+            ) === true,
+        ),
+        Stream.take(1),
+        Stream.runDrain,
+      );
+      const merged = yield* usageStore.get;
+      NodeAssert.equal(
+        merged?.windows.find((window) => window.kind === "session")?.usedPercent,
+        20,
+      );
+      NodeAssert.equal(merged?.planLabel, "plus");
+    }),
+  );
+});

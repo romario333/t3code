@@ -577,6 +577,7 @@ function apiProviderAuthMetadata(
 // account info. The previous 8s budget expired mid-init, so the probe returned
 // `undefined` and left the provider unverified and unselectable in the picker.
 const CAPABILITIES_PROBE_TIMEOUT_MS = 25_000;
+const USAGE_PROBE_TIMEOUT_MS = 3_000;
 
 /**
  * Keep workspace-scoped command discovery intact while isolating the periodic
@@ -625,7 +626,7 @@ function nonEmptyProbeString(value: string): string | undefined {
   return candidate ? candidate : undefined;
 }
 
-type ClaudeCapabilitiesProbe = {
+export type ClaudeCapabilitiesProbe = {
   readonly email: string | undefined;
   readonly subscriptionType: string | undefined;
   readonly tokenSource: string | undefined;
@@ -636,6 +637,13 @@ type ClaudeCapabilitiesProbe = {
    */
   readonly apiProvider: string | undefined;
   readonly slashCommands: ReadonlyArray<ServerProviderSlashCommand>;
+  /**
+   * Raw response of the SDK's experimental usage control request (the data
+   * behind Claude Code's `/usage`), or absent when the SDK doesn't support
+   * it or the request failed. Decoded leniently downstream via
+   * `normalizeClaudeUsageReadResponse`.
+   */
+  readonly rateLimitUsage?: unknown;
 };
 
 function parseClaudeInitializationCommands(
@@ -735,8 +743,12 @@ const probeClaudeCapabilities = (
       claudeSettings.binaryPath,
       claudeEnvironment,
     );
-    return yield* Effect.tryPromise(async () => {
-      const q = claudeQuery({
+    // Initialization gets the probe budget to itself; the usage pull below
+    // runs afterwards under its own short deadline so it can never push a
+    // slow (e.g. Bedrock) init past the probe deadline and discard the
+    // already-read account metadata.
+    const initResult = yield* Effect.tryPromise(async () => {
+      const query = claudeQuery({
         // Never yield — we only need initialization data, not a conversation.
         // This prevents any prompt from reaching the Anthropic API.
         // oxlint-disable-next-line require-yield
@@ -750,35 +762,49 @@ const probeClaudeCapabilities = (
           cwd,
         }),
       });
-      const init = await q.initializationResult();
-      const account = init.account as
-        | {
-            readonly email?: string;
-            readonly subscriptionType?: string;
-            readonly tokenSource?: string;
-            readonly apiProvider?: string;
-          }
-        | undefined;
-      return {
-        email: account?.email,
-        subscriptionType: account?.subscriptionType,
-        tokenSource: account?.tokenSource,
-        apiProvider: account?.apiProvider,
-        slashCommands: parseClaudeInitializationCommands(init.commands),
-      } satisfies ClaudeCapabilitiesProbe;
-    });
+      return { q: query, init: await query.initializationResult() };
+    }).pipe(Effect.timeoutOption(CAPABILITIES_PROBE_TIMEOUT_MS));
+    if (Option.isNone(initResult)) {
+      return undefined;
+    }
+    const { q, init } = initResult.value;
+    const account = init.account as
+      | {
+          readonly email?: string;
+          readonly subscriptionType?: string;
+          readonly tokenSource?: string;
+          readonly apiProvider?: string;
+        }
+      | undefined;
+    const usagePull = (
+      q as {
+        usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: () => Promise<unknown>;
+      }
+    ).usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET;
+    // Bounded by its own short deadline: a CLI that ignores this
+    // experimental control request must not sink the whole probe.
+    const rateLimitUsage = usagePull
+      ? yield* Effect.promise(() => usagePull.call(q).catch(() => undefined)).pipe(
+          Effect.timeoutOption(USAGE_PROBE_TIMEOUT_MS),
+          Effect.map(Option.getOrUndefined),
+        )
+      : undefined;
+    return {
+      email: account?.email,
+      subscriptionType: account?.subscriptionType,
+      tokenSource: account?.tokenSource,
+      apiProvider: account?.apiProvider,
+      slashCommands: parseClaudeInitializationCommands(init.commands),
+      rateLimitUsage,
+    } satisfies ClaudeCapabilitiesProbe;
   }).pipe(
     Effect.ensuring(
       Effect.sync(() => {
         if (!abort.signal.aborted) abort.abort();
       }),
     ),
-    Effect.timeoutOption(CAPABILITIES_PROBE_TIMEOUT_MS),
     Effect.result,
-    Effect.map((result) => {
-      if (Result.isFailure(result)) return undefined;
-      return Option.isSome(result.success) ? result.success.value : undefined;
-    }),
+    Effect.map((result) => (Result.isFailure(result) ? undefined : result.success)),
   );
 };
 
