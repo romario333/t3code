@@ -109,7 +109,7 @@ describe("DesktopSettings", () => {
         mainWindowBounds: null,
         mainWindowMaximized: false,
         serverExposureMode: "local-only",
-        tailscaleServeEnabled: false,
+        tailscaleServeEnabled: true,
         tailscaleServePort: 443,
         updateChannel: "nightly",
         updateChannelConfiguredByUser: false,
@@ -195,8 +195,9 @@ describe("DesktopSettings", () => {
         const exposure = yield* settings.setServerExposureMode("local-only");
         assert.isFalse(exposure.changed);
 
+        // FORK: `true` is the no-op here because Tailscale Serve defaults on.
         const tailscale = yield* settings.setTailscaleServe({
-          enabled: false,
+          enabled: true,
           port: Option.none(),
         });
         assert.isFalse(tailscale.changed);
@@ -349,7 +350,7 @@ describe("DesktopSettings", () => {
           mainWindowBounds: null,
           mainWindowMaximized: false,
           serverExposureMode: "local-only",
-          tailscaleServeEnabled: false,
+          tailscaleServeEnabled: true,
           tailscaleServePort: 443,
           updateChannel: "nightly",
           updateChannelConfiguredByUser: false,
@@ -377,7 +378,7 @@ describe("DesktopSettings", () => {
           mainWindowBounds: null,
           mainWindowMaximized: false,
           serverExposureMode: "local-only",
-          tailscaleServeEnabled: false,
+          tailscaleServeEnabled: true,
           tailscaleServePort: 443,
           updateChannel: "latest",
           updateChannelConfiguredByUser: true,
@@ -412,6 +413,60 @@ describe("DesktopSettings", () => {
           wslOnly: false,
           wslDistro: null,
         } satisfies DesktopAppSettings.DesktopSettings);
+      }),
+    ),
+  );
+
+  // FORK: Tailscale Serve defaults on. These three cover the round-trip that
+  // makes the flipped default work with sparse persistence: an absent key
+  // means "not configured" and resolves to the default, while an explicit
+  // opt-out differs from the default and is therefore written to disk.
+  it.effect("defaults Tailscale Serve on when the persisted document omits the key", () =>
+    withSettings(
+      Effect.gen(function* () {
+        const settings = yield* DesktopAppSettings.DesktopAppSettings;
+        yield* writeSettingsPatch({ serverExposureMode: "local-only" });
+
+        const loaded = yield* settings.load;
+        assert.isTrue(loaded.tailscaleServeEnabled);
+        assert.equal(loaded.tailscaleServePort, 443);
+      }),
+    ),
+  );
+
+  it.effect("keeps an explicit Tailscale Serve opt-out", () =>
+    withSettings(
+      Effect.gen(function* () {
+        const settings = yield* DesktopAppSettings.DesktopAppSettings;
+        yield* writeSettingsPatch({ tailscaleServeEnabled: false });
+
+        assert.isFalse((yield* settings.load).tailscaleServeEnabled);
+      }),
+    ),
+  );
+
+  it.effect("persists an explicit Tailscale Serve opt-out to disk", () =>
+    withSettings(
+      Effect.gen(function* () {
+        const environment = yield* DesktopEnvironment.DesktopEnvironment;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const settings = yield* DesktopAppSettings.DesktopAppSettings;
+
+        const disabled = yield* settings.setTailscaleServe({
+          enabled: false,
+          port: Option.none(),
+        });
+        assert.isTrue(disabled.changed);
+        assert.isFalse(disabled.settings.tailscaleServeEnabled);
+
+        const persisted = yield* decodeDesktopSettingsPatch(
+          yield* fileSystem.readFileString(environment.desktopSettingsPath),
+        );
+        assert.deepEqual(persisted, {
+          tailscaleServeEnabled: false,
+        } satisfies typeof DesktopSettingsPatch.Type);
+
+        assert.isFalse((yield* settings.load).tailscaleServeEnabled);
       }),
     ),
   );

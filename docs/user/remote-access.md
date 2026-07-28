@@ -83,6 +83,13 @@ Mobile keeps its manual environment selection.
 Join both devices to the same tailnet. In the desktop app, enable **Tailscale
 HTTPS** in **Settings → Connections**. Turn it off there to remove that route.
 
+> Fork note
+> This fork's desktop builds enable Tailscale HTTPS by default, so a fresh install needs no setup
+> step. **Network access** stays off by default, so the backend still binds only `127.0.0.1` and
+> Tailscale Serve is the sole path in. Turning the Tailscale HTTPS row off is persisted and
+> survives restarts. Serve needs MagicDNS and HTTPS Certificates enabled on the tailnet; without
+> them the backend logs a warning and starts normally on loopback.
+
 To start a command-line server with Tailscale HTTPS:
 
 ```bash
