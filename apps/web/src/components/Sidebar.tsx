@@ -40,10 +40,12 @@ import {
   CircleAlertIcon,
   CircleCheckIcon,
   CircleDashedIcon,
+  CircleIcon,
   ClockIcon,
   FolderIcon,
   FolderPlusIcon,
   GitBranchIcon,
+  ListTodoIcon,
   MessageSquareIcon,
   PinIcon,
   PlusIcon,
@@ -94,6 +96,12 @@ import {
   buildSidebarProjectSnapshots,
   type SidebarProjectSnapshot,
 } from "../sidebarProjectGrouping";
+import {
+  countUnresolvedTodos,
+  EMPTY_THREAD_TODOS,
+  type ThreadTodoItem,
+  useThreadTodosStore,
+} from "../threadTodosStore";
 import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { useThreadActions } from "../hooks/useThreadActions";
@@ -657,6 +665,226 @@ const SidebarDraftBlock = memo(function SidebarDraftBlock(props: {
   );
 });
 
+/**
+ * The row's todo affordance: a task icon that carries the unresolved count and
+ * opens a quick-entry checklist. Like snooze, the row owns the open state so it
+ * can pin its hover actions while the popover is up.
+ *
+ * These todos are the user's own (see threadTodosStore) — unrelated to the
+ * agent's plan steps, which live in the chat's Tasks panel.
+ */
+function ThreadTodosPopoverButton(props: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  threadRef: ScopedThreadRef;
+  todos: readonly ThreadTodoItem[];
+  unresolvedCount: number;
+  variant: "card" | "slim";
+}) {
+  const { open, onOpenChange, threadRef, todos, unresolvedCount, variant } = props;
+  const addTodo = useThreadTodosStore((state) => state.addTodo);
+  const editTodo = useThreadTodosStore((state) => state.editTodo);
+  const toggleTodo = useThreadTodosStore((state) => state.toggleTodo);
+  const removeTodo = useThreadTodosStore((state) => state.removeTodo);
+  const [draft, setDraft] = useState("");
+  // At most one item is in edit mode; its draft lives here rather than in the
+  // store so an abandoned edit never reaches localStorage.
+  const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  // Enter and Escape both unmount the input, and the resulting blur must not
+  // commit a second time (Escape especially — that would undo the cancel).
+  const editSettledRef = useRef(false);
+
+  const startEditing = useCallback((todo: ThreadTodoItem) => {
+    editSettledRef.current = false;
+    setEditingTodoId(todo.id);
+    setEditDraft(todo.text);
+  }, []);
+  const commitEdit = useCallback(() => {
+    if (editingTodoId) editTodo(threadRef, editingTodoId, editDraft);
+    setEditingTodoId(null);
+    setEditDraft("");
+  }, [editDraft, editTodo, editingTodoId, threadRef]);
+  const cancelEdit = useCallback(() => {
+    setEditingTodoId(null);
+    setEditDraft("");
+  }, []);
+  const handleEditKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLInputElement>) => {
+      // Same reason as the draft input: the row behind the popover is a button.
+      event.stopPropagation();
+      if (event.key === "Enter") {
+        event.preventDefault();
+        editSettledRef.current = true;
+        commitEdit();
+        return;
+      }
+      if (event.key === "Escape") {
+        // preventDefault keeps the popover open: Escape belongs to the edit
+        // first, and the list is still there to work with afterwards.
+        event.preventDefault();
+        editSettledRef.current = true;
+        cancelEdit();
+      }
+    },
+    [cancelEdit, commitEdit],
+  );
+  const handleEditBlur = useCallback(() => {
+    // Clicking elsewhere in the list (another item, the checkbox, the add
+    // field) keeps the edit rather than dropping it, matching thread rename.
+    if (!editSettledRef.current) commitEdit();
+  }, [commitEdit]);
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      // A dismissed popover blurs the input first, so the edit is already
+      // committed; this only stops a stale editor from reappearing on reopen.
+      if (!next) cancelEdit();
+      onOpenChange(next);
+    },
+    [cancelEdit, onOpenChange],
+  );
+
+  const handleDraftKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLInputElement>) => {
+      // The row is a button: without this its Enter/Escape handlers would
+      // navigate or cancel out from under the popover.
+      event.stopPropagation();
+      if (event.key === "Enter") {
+        event.preventDefault();
+        addTodo(threadRef, draft);
+        // Keep focus and the popover open: adding tasks comes in bursts.
+        setDraft("");
+        return;
+      }
+      if (event.key === "Escape" && draft.length > 0) {
+        // First Escape clears a half-typed task, second closes the popover.
+        event.preventDefault();
+        setDraft("");
+      }
+    },
+    [addTodo, draft, threadRef],
+  );
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            aria-label={
+              unresolvedCount > 0 ? `Todos (${unresolvedCount} unresolved)` : "Add a todo"
+            }
+            onClick={(event) => event.stopPropagation()}
+            // Double-click on the row starts a rename; the icon must not.
+            onDoubleClick={(event) => event.stopPropagation()}
+            className={cn(
+              // No h-full: neither placement stretches its row, so the button
+              // sizes to its own content.
+              "inline-flex shrink-0 cursor-pointer items-center gap-0.5 rounded-md bg-transparent px-1 text-xs tabular-nums text-muted-foreground hover:text-foreground",
+              // Unresolved work stays on screen; an empty list only offers
+              // itself on hover, the same bargain the snooze clock makes.
+              unresolvedCount > 0
+                ? null
+                : "opacity-0 transition-opacity focus-visible:opacity-100 group-hover/sidebar-row:opacity-100",
+              open && "opacity-100",
+            )}
+          />
+        }
+      >
+        <ListTodoIcon className={variant === "slim" ? "size-3" : "size-3.5"} />
+        {unresolvedCount > 0 ? <span>{unresolvedCount}</span> : null}
+      </PopoverTrigger>
+      <PopoverPopup side="bottom" align="end" className="w-64" viewportClassName="p-2">
+        {todos.length > 0 ? (
+          <ul className="mb-1 flex max-h-64 flex-col gap-0.5 overflow-y-auto">
+            {todos.map((todo) => (
+              <li
+                key={todo.id}
+                className="group/todo flex items-start gap-1.5 rounded-md px-1 py-1"
+              >
+                <button
+                  type="button"
+                  aria-label={todo.completed ? "Mark as not done" : "Mark as done"}
+                  aria-pressed={todo.completed}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleTodo(threadRef, todo.id);
+                  }}
+                  className="mt-px shrink-0 cursor-pointer text-muted-foreground hover:text-foreground"
+                >
+                  {todo.completed ? (
+                    <CircleCheckIcon className="size-3.5" />
+                  ) : (
+                    <CircleIcon className="size-3.5" />
+                  )}
+                </button>
+                {editingTodoId === todo.id ? (
+                  <input
+                    autoFocus
+                    value={editDraft}
+                    aria-label="Edit todo"
+                    onChange={(event) => setEditDraft(event.target.value)}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onKeyDown={handleEditKeyDown}
+                    onBlur={handleEditBlur}
+                    onClick={(event) => event.stopPropagation()}
+                    className="min-w-0 flex-1 rounded-sm border border-input bg-card px-1 text-xs text-card-foreground outline-none focus:border-foreground"
+                  />
+                ) : (
+                  <>
+                    {/* The text is the edit affordance: a popover this small has
+                        no room for a pencil next to the delete X, and a single
+                        click is cheap to undo (Escape) if it was a misfire. The
+                        button's own text is its accessible name. */}
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        startEditing(todo);
+                      }}
+                      className={cn(
+                        "min-w-0 flex-1 cursor-text break-words text-left text-xs",
+                        todo.completed
+                          ? "text-muted-foreground/60 line-through"
+                          : "text-foreground/90",
+                      )}
+                    >
+                      {todo.text}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Delete todo"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        removeTodo(threadRef, todo.id);
+                      }}
+                      className="mt-px shrink-0 cursor-pointer text-muted-foreground/60 opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/todo:opacity-100"
+                    >
+                      <XIcon className="size-3" />
+                    </button>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mb-1 px-1 py-1 text-xs text-muted-foreground/70">No todos yet.</p>
+        )}
+        <input
+          autoFocus
+          value={draft}
+          aria-label="Add a todo"
+          placeholder="Add a task…"
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={handleDraftKeyDown}
+          onClick={(event) => event.stopPropagation()}
+          className="w-full rounded-sm border border-input bg-card px-1.5 py-1 text-xs text-card-foreground outline-none placeholder:text-muted-foreground/60 focus:border-foreground"
+        />
+      </PopoverPopup>
+    </Popover>
+  );
+}
+
 const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   thread: SidebarThreadSummary;
   variant: "card" | "slim";
@@ -1016,6 +1244,15 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   useEffect(() => {
     if (!showSnoozeButton) setSnoozeMenuOpen(false);
   }, [showSnoozeButton]);
+  // Subscribed per thread key inside the memoized row: a todo edit re-renders
+  // one row, not the whole list. The frozen fallback keeps rows without todos
+  // from re-rendering at all.
+  const todos =
+    useThreadTodosStore((state) => state.todosByThreadKey[threadKey]) ?? EMPTY_THREAD_TODOS;
+  const unresolvedTodoCount = countUnresolvedTodos(todos);
+  // Same pinning bargain as snooze: the pointer leaves the row while the
+  // popover is up, and the hover actions must not fade out from under it.
+  const [todosMenuOpen, setTodosMenuOpen] = useState(false);
   const handlePrClick = useCallback(
     (event: ReactMouseEvent<HTMLAnchorElement>) => {
       if (!pr?.url) return;
@@ -1176,6 +1413,17 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                 Regenerating title
               </span>
             ) : null}
+            {/* Slim rows have no hover cluster to hide in, so the count and
+              the affordance are the same control. It sits ahead of the PR
+              badge so appearing/disappearing todos don't shift the badge. */}
+            <ThreadTodosPopoverButton
+              open={todosMenuOpen}
+              onOpenChange={setTodosMenuOpen}
+              threadRef={threadRef}
+              todos={todos}
+              unresolvedCount={unresolvedTodoCount}
+              variant="slim"
+            />
             {/* The PR badge stays outside the hover-fading slot: it must
               remain visible AND clickable while the row is hovered. Only
               the time/jump label yields to the settle affordance. */}
@@ -1472,6 +1720,18 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                 <span className="flex-1" />
               )}
               {terminalStatusIcon}
+              {/* Lives on the metadata line rather than the hover overlay so
+                  the count survives at rest, and is the trigger itself so the
+                  row carries one todo control, not two. It leads the PR/diff
+                  pair so those keep their place as todos come and go. */}
+              <ThreadTodosPopoverButton
+                open={todosMenuOpen}
+                onOpenChange={setTodosMenuOpen}
+                threadRef={threadRef}
+                todos={todos}
+                unresolvedCount={unresolvedTodoCount}
+                variant="card"
+              />
               {prBadge}
               {diff ? (
                 <span className="shrink-0 font-mono">
