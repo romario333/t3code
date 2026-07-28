@@ -153,6 +153,10 @@ export interface CodexSessionRuntimeShape {
     requestId: ApprovalRequestId,
     answers: ProviderUserInputAnswers,
   ) => Effect.Effect<void, CodexSessionRuntimeError>;
+  readonly readAccountRateLimits: Effect.Effect<
+    EffectCodexSchema.V2GetAccountRateLimitsResponse,
+    CodexSessionRuntimeError
+  >;
   readonly events: Stream.Stream<ProviderEvent, never>;
   readonly close: Effect.Effect<void>;
 }
@@ -1983,6 +1987,7 @@ export const makeCodexSessionRuntime = (
             },
           });
         }),
+      readAccountRateLimits: client.request("account/rateLimits/read", undefined),
       events: Stream.fromQueue(events),
       close,
     } satisfies CodexSessionRuntimeShape;
