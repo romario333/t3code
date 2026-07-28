@@ -14,6 +14,12 @@ const isIosPersonalTeamBuild = repoEnv.T3CODE_IOS_PERSONAL_TEAM === "1";
 const personalTeamBundleIdentifier = repoEnv.T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID?.trim();
 const IOS_BUNDLE_IDENTIFIER_PATTERN = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
 
+// FORK: Apple team ID for code signing. Defaults to the upstream T3 Tools team
+// so unset environments behave exactly as before; a fork sets this to its own
+// 10-character team ID to sign locally built device apps.
+const DEFAULT_IOS_TEAM_ID = "ARK85ZXQ4Z";
+const iosTeamId = repoEnv.T3CODE_IOS_TEAM_ID?.trim() || DEFAULT_IOS_TEAM_ID;
+
 const fromRepoRoot = (relativePath: string) => `../../${relativePath}`;
 
 if (
@@ -173,7 +179,11 @@ const config: ExpoConfig = {
   icon: variant.assets.appIcon,
   userInterfaceStyle: "automatic",
   updates: {
-    enabled: true,
+    // FORK: a self-signed fork build must never pull OTA JS from upstream's
+    // Expo channel — it would silently replace this build's own bundle on
+    // first launch. The reduced-capability switch is the reliable marker for
+    // "built locally against a team that is not T3 Tools".
+    enabled: !isIosPersonalTeamBuild,
     url: "https://u.expo.dev/d763fcb8-d37c-41ea-a773-b54a0ab4a454",
     checkAutomatically: "ON_LOAD",
     fallbackToCacheTimeout: 0,
@@ -185,7 +195,10 @@ const config: ExpoConfig = {
     // Pin code signing to the T3 Tools team so non-interactive `expo run:ios`
     // does not fall back to a personal team (which cannot sign app groups,
     // Sign in with Apple, or push notification entitlements).
-    appleTeamId: "ARK85ZXQ4Z",
+    // FORK: T3CODE_IOS_TEAM_ID lets a self-built fork sign against its own
+    // Apple Developer team. The upstream team stays the default so nothing
+    // changes for builds that do not set it.
+    appleTeamId: iosTeamId,
     associatedDomains: [
       `applinks:${variant.relyingParty}`,
       `webcredentials:${variant.relyingParty}`,
@@ -216,6 +229,12 @@ const config: ExpoConfig = {
     favicon: variant.assets.appIcon,
   },
   plugins: [
+    // FORK: must be FIRST. Entitlement mods execute in reverse registration
+    // order (see the appleSignIn note below), so registering this last made it
+    // run before expo-notifications re-added `aps-environment` and before the
+    // base mod applied `ios.associatedDomains` — it stripped nothing. Placed
+    // first, it runs last and actually wins.
+    ...(isIosPersonalTeamBuild ? ["./plugins/withoutIosPersonalTeamCapabilities.cjs"] : []),
     "expo-asset",
     [
       "expo-font",
@@ -318,7 +337,6 @@ const config: ExpoConfig = {
     "./plugins/withAndroidModernPopupMenu.cjs",
     "./plugins/withAndroidModernAlertDialog.cjs",
     "./plugins/withAndroidPredictiveBackCompat.cjs",
-    ...(isIosPersonalTeamBuild ? ["./plugins/withoutIosPersonalTeamCapabilities.cjs"] : []),
   ],
   extra: {
     appVariant: APP_VARIANT,
