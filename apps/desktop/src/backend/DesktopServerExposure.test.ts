@@ -195,7 +195,7 @@ describe("DesktopServerExposure", () => {
           mode: "network-accessible",
           endpointUrl: "http://192.168.1.20:4173",
           advertisedHost: "192.168.1.20",
-          tailscaleServeEnabled: false,
+          tailscaleServeEnabled: true,
           tailscaleServePort: 443,
         });
 
@@ -330,7 +330,10 @@ describe("DesktopServerExposure", () => {
       Effect.gen(function* () {
         const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
         yield* serverExposure.configureFromSettings({ port: 4173 });
-        // mode stays at default "local-only", tailscaleServeEnabled stays false.
+        // Mode stays at the default "local-only". Tailscale Serve defaults ON
+        // in this fork, so opt out explicitly to exercise the gate that keeps
+        // the CLI unspawned when the user has opted into no exposure at all.
+        yield* serverExposure.setTailscaleServeEnabled({ enabled: false });
 
         const endpoints = yield* serverExposure.getAdvertisedEndpoints;
         // Only the loopback endpoint; no tailscale spawn means the dieOnSpawnLayer
