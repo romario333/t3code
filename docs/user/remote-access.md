@@ -208,6 +208,12 @@ On Linux, T3 Code also needs permission to manage Tailscale; see
 for non-root users. If any of these is missing, T3 Code still starts but can't
 add the HTTPS route.
 
+> Fork note
+> This fork's desktop builds enable Tailscale HTTPS by default, so a fresh install needs no setup
+> step. **Network access** stays off by default, so the backend still binds only `127.0.0.1` and
+> Tailscale Serve is the sole path in. Turning the Tailscale HTTPS row off is persisted and
+> survives restarts.
+
 To start a command-line server with Tailscale HTTPS:
 
 ```bash
