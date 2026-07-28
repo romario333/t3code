@@ -36,6 +36,12 @@ Join both devices to a tailnet with [MagicDNS and HTTPS certificates](https://ta
 - **Desktop**: Enable **Settings → Sharing & access → Tailscale HTTPS**.
 - **CLI**: Run `t3 serve --tailscale-serve` or `t3 pair --tailscale` (use `--tailscale-serve-port` if 443 is taken; remove with `tailscale serve --https=443 --set-path=/ off`).
 
+> Fork note
+> This fork's desktop builds enable Tailscale HTTPS by default, so a fresh install needs no setup
+> step. **Network access** stays off by default, so the backend still binds only `127.0.0.1` and
+> Tailscale Serve is the sole path in. Turning the Tailscale HTTPS row off is persisted and
+> survives restarts.
+
 ### Balance new threads across machines
 
 On web and desktop with 2+ connected machines, enable **Settings → Environments → Load balancing** (per client) to auto-select a host for new threads in shared projects. Set each machine to **Prefer**, **Normal**, **Less often**, or **Manual only**.
