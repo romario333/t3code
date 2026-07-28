@@ -229,6 +229,12 @@ const config: ExpoConfig = {
     favicon: variant.assets.appIcon,
   },
   plugins: [
+    // FORK: must be FIRST. Entitlement mods execute in reverse registration
+    // order (see the appleSignIn note below), so registering this last made it
+    // run before expo-notifications re-added `aps-environment` and before the
+    // base mod applied `ios.associatedDomains` — it stripped nothing. Placed
+    // first, it runs last and actually wins.
+    ...(isIosPersonalTeamBuild ? ["./plugins/withoutIosPersonalTeamCapabilities.cjs"] : []),
     "expo-asset",
     [
       "expo-font",
@@ -331,7 +337,6 @@ const config: ExpoConfig = {
     "./plugins/withAndroidModernPopupMenu.cjs",
     "./plugins/withAndroidModernAlertDialog.cjs",
     "./plugins/withAndroidPredictiveBackCompat.cjs",
-    ...(isIosPersonalTeamBuild ? ["./plugins/withoutIosPersonalTeamCapabilities.cjs"] : []),
   ],
   extra: {
     appVariant: APP_VARIANT,
