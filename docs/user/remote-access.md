@@ -53,6 +53,13 @@ backend. Use **Setup** on the Tailscale HTTPS row to opt in. The desktop app res
 with the same server-side behavior as `t3 serve --tailscale-serve`, then the server asks Tailscale
 Serve to proxy HTTPS traffic to the local backend.
 
+> Fork note
+> This fork's desktop builds enable Tailscale Serve by default, so a fresh install needs no Setup
+> step. **Network access** stays off by default, so the backend still binds only `127.0.0.1` and
+> Tailscale Serve is the sole path in. Turning the Tailscale HTTPS row off is persisted and
+> survives restarts. Serve needs MagicDNS and HTTPS Certificates enabled on the tailnet; without
+> them the backend logs a warning and starts normally on loopback.
+
 The Tailscale support is an endpoint provider add-on. The core remote model still works without Tailscale: LAN HTTP endpoints, custom HTTPS endpoints, future tunnels, and SSH-launched environments all use the same saved environment and pairing flow.
 
 For `https://app.t3.codes`, prefer an HTTPS Tailnet or other HTTPS endpoint. A plain `http://100.x.y.z:3773` endpoint can still work from a desktop client or another browser page served over HTTP, but it will not work from the hosted HTTPS app because of browser mixed-content rules.
