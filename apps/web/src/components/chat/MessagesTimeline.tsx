@@ -33,6 +33,7 @@ import {
 } from "../../session-logic";
 import { type TurnDiffSummary } from "../../types";
 import {
+  DIFF_COLOR_UNSAFE_CSS,
   getRenderablePatch,
   resolveDiffThemeName,
   resolveFileDiffPath,
@@ -1686,6 +1687,8 @@ function UserMessageReviewCommentCard({ comment }: { comment: ReviewCommentConte
               collapsed: false,
               diffStyle: "unified",
               theme: resolveDiffThemeName(ctx.resolvedTheme),
+              themeType: ctx.resolvedTheme,
+              unsafeCSS: DIFF_COLOR_UNSAFE_CSS,
             }}
           />
         ))}
