@@ -12,6 +12,60 @@ export function resolveDiffThemeName(theme: "light" | "dark"): DiffThemeName {
   return theme === "dark" ? DIFF_THEME_NAMES.dark : DIFF_THEME_NAMES.light;
 }
 
+/** Diff line tints modelled on VS Code's diff editor.
+ *
+ *  The renderer normally tints a changed line by mixing the change color into
+ *  the surface at 12% (light) / 20% (dark), which is close to invisible on our
+ *  near-white and near-black diff surfaces. Pinning that mix to 0% turns the
+ *  `*-override` colors below into the literal line background, and keeping them
+ *  translucent lets one palette composite correctly over both themes — the same
+ *  way VS Code layers `diffEditor.insertedLineBackground` (#9bb955) and
+ *  `diffEditor.removedLineBackground` (#ff0000) over the editor background.
+ *
+ *  Pass to a diff/code view as `options.unsafeCSS` (concatenate with any
+ *  view-specific CSS) so every diff surface in the app tints alike. */
+export const DIFF_COLOR_UNSAFE_CSS = `
+:host {
+  --diffs-bg-addition-override: rgb(155 185 85 / 0.27);
+  --diffs-bg-addition-number-override: rgb(155 185 85 / 0.35);
+  --diffs-bg-addition-emphasis-override: rgb(156 204 44 / 0.28);
+
+  --diffs-bg-deletion-override: rgb(255 0 0 / 0.2);
+  --diffs-bg-deletion-number-override: rgb(255 0 0 / 0.27);
+  --diffs-bg-deletion-emphasis-override: rgb(255 0 0 / 0.23);
+
+  /* Token backgrounds default to \`inherit\`, which would paint the translucent
+     line tint a second time behind every token. */
+  --diffs-token-light-bg: transparent;
+  --diffs-token-dark-bg: transparent;
+}
+
+:where([data-background])
+  :is([data-line], [data-no-newline], [data-gutter-buffer], [data-column-number]) {
+  --mix-light: 0%;
+  --mix-dark: 0%;
+}
+
+/* The renderer's hover tint rides on the same mix, so restore it here. */
+@media (pointer: fine) {
+  [data-line-type="change-addition"][data-hovered]:is([data-line], [data-no-newline]) {
+    --diffs-diff-line-mix-target: rgb(155 185 85 / 0.35);
+  }
+
+  [data-line-type="change-addition"][data-hovered]:is([data-gutter-buffer], [data-column-number]) {
+    --diffs-diff-line-mix-target: rgb(155 185 85 / 0.48);
+  }
+
+  [data-line-type="change-deletion"][data-hovered]:is([data-line], [data-no-newline]) {
+    --diffs-diff-line-mix-target: rgb(255 0 0 / 0.27);
+  }
+
+  [data-line-type="change-deletion"][data-hovered]:is([data-gutter-buffer], [data-column-number]) {
+    --diffs-diff-line-mix-target: rgb(255 0 0 / 0.37);
+  }
+}
+`;
+
 const FNV_OFFSET_BASIS_32 = 0x811c9dc5;
 const FNV_PRIME_32 = 0x01000193;
 const SECONDARY_HASH_SEED = 0x9e3779b9;
