@@ -795,7 +795,7 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
   const prStatus = prStatusIndicator(pr, gitStatus.data?.sourceControlProvider);
   const settledPrHoverClass = pr ? settledPrHoverColorClass(pr.state) : undefined;
   // Report the PR state up: the parent partitions rows with effectiveSettled,
-  // and a merged/closed PR auto-settles a thread — data only rows have.
+  // and a closed PR auto-settles a thread — data only rows have.
   const prState = pr?.state ?? null;
   useEffect(() => {
     onChangeRequestState(threadKey, prState);
@@ -1112,7 +1112,7 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
                   </span>
                 ) : isWoke ? (
                   // A wake can land straight in the settled tail (e.g. PR
-                  // merged while snoozed); the signal must survive the trip.
+                  // closed while snoozed); the signal must survive the trip.
                   <span
                     role="status"
                     aria-label="Woke from snooze"
@@ -1659,8 +1659,12 @@ export default function SidebarV2() {
   // fresh clock whenever it recomputes.
   const [snoozeWakeTick, bumpSnoozeWakeTick] = useState(0);
 
-  // PR states stream in per-row (rows own the VCS subscriptions); a merged or
-  // closed PR auto-settles its thread on the next partition.
+  // PR states stream in per-row (rows own the VCS subscriptions); a closed PR
+  // auto-settles its thread on the next partition. Merged is deliberately NOT
+  // an auto-settle trigger: merging a PR is usually mid-flight (follow-up
+  // review comments, a revert, the next branch off the same thread), and
+  // sweeping the row into the settled tail hides work that is still live.
+  // Settling a merged thread stays a manual act.
   const [changeRequestStateByKey, setChangeRequestStateByKey] = useState<
     ReadonlyMap<string, "open" | "closed" | "merged">
   >(() => new Map());
@@ -1899,7 +1903,12 @@ export default function SidebarV2() {
         const supportsSnooze =
           serverConfigs.get(thread.environmentId)?.environment.capabilities.threadSnooze === true;
         const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
-        const changeRequestState = changeRequestStateByKey.get(threadKey) ?? null;
+        // "merged" is withheld from effectiveSettled so it never auto-settles;
+        // the raw state is still kept in the map for everything else that reads
+        // it. Closed keeps its auto-settle.
+        const reportedChangeRequestState = changeRequestStateByKey.get(threadKey) ?? null;
+        const changeRequestState =
+          reportedChangeRequestState === "merged" ? null : reportedChangeRequestState;
         // Snooze outranks everything, including a pin: "hide until Tuesday"
         // temporarily suspends "keep on top". The pin survives underneath —
         // pinned cards are creation-ordered, so on wake the thread reappears
@@ -3259,7 +3268,7 @@ export default function SidebarV2() {
                             : null
                         }
                         // All sections: a woken thread can classify straight
-                        // into the settled tail (PR merged while snoozed), and
+                        // into the settled tail (PR closed while snoozed), and
                         // the wake signal must survive the trip. Still-snoozed
                         // rows resolve to null on their own.
                         wokeAt={threadWokeAt(thread, { now: snoozeNow })}
