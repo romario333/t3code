@@ -1,4 +1,5 @@
 // @effect-diagnostics globalDate:off -- Tests exercise local calendar snooze boundaries.
+import type { OrchestrationThreadShell } from "@t3tools/contracts";
 import { ThreadId } from "@t3tools/contracts";
 import { TurnId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
@@ -28,11 +29,15 @@ function makeShell(input: {
   readonly sessionStatus?: "starting" | "running" | "ready" | "error";
   readonly pending?: "approval" | "user-input";
   readonly turnCompletedAt?: string | null;
-}): ThreadSnoozeShell {
+  readonly settledOverride?: "settled" | "active" | null;
+  readonly settledAt?: string | null;
+}): ThreadSnoozeShell & Pick<OrchestrationThreadShell, "settledOverride" | "settledAt"> {
   const threadId = ThreadId.make("thread-1");
   return {
     snoozedUntil: input.snoozedUntil ?? null,
     snoozedAt: input.snoozedAt ?? (input.snoozedUntil != null ? SNOOZED_AT : null),
+    settledOverride: input.settledOverride ?? null,
+    settledAt: input.settledAt ?? null,
     hasPendingApprovals: input.pending === "approval",
     hasPendingUserInput: input.pending === "user-input",
     session:
@@ -240,6 +245,42 @@ describe("threadWokeAt", () => {
         { now: NOW },
       ),
     ).toBe("2026-04-10T09:30:00.000Z");
+  });
+
+  it("treats an explicit settle after the wake as acknowledgment", () => {
+    // Settling a woken thread is the user acting on it, same as visiting:
+    // the wake signal must not follow the row into the settled tail.
+    expect(
+      threadWokeAt(
+        makeShell({
+          snoozedUntil: PAST_WAKE,
+          settledOverride: "settled",
+          settledAt: "2026-04-10T11:00:00.000Z",
+        }),
+        { now: NOW },
+      ),
+    ).toBe(null);
+  });
+
+  it("keeps the wake signal when the settle predates the wake", () => {
+    // Settled at 8:00, snoozed wake at 10:00: the settle could not have
+    // acknowledged a wake that had not happened yet.
+    expect(
+      threadWokeAt(
+        makeShell({
+          snoozedUntil: PAST_WAKE,
+          settledOverride: "settled",
+          settledAt: "2026-04-10T08:00:00.000Z",
+        }),
+        { now: NOW },
+      ),
+    ).toBe(PAST_WAKE);
+  });
+
+  it("keeps the wake signal through an auto-settle — no settledAt stamped", () => {
+    // A wake can land straight in the settled tail (PR closed while
+    // snoozed); without an explicit settle the user never acted on it.
+    expect(threadWokeAt(makeShell({ snoozedUntil: PAST_WAKE }), { now: NOW })).toBe(PAST_WAKE);
   });
 });
 

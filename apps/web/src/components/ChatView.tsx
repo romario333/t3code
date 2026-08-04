@@ -26,7 +26,11 @@ import {
   connectionStatusTitle,
   type EnvironmentConnectionPresentation,
 } from "@t3tools/client-runtime/connection";
-import { effectiveSettled, effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
+import {
+  effectiveSettled,
+  effectiveSnoozed,
+  threadWokeAt,
+} from "@t3tools/client-runtime/state/thread-settled";
 import {
   parseScopedThreadKey,
   scopedThreadKey,
@@ -1854,16 +1858,30 @@ function ChatViewContent(props: ChatViewProps) {
     if (!serverThread?.id) return;
     const threadUpdatedAt = Date.parse(serverThread.updatedAt);
     if (Number.isNaN(threadUpdatedAt)) return;
+    // Visiting also acknowledges a snooze wake. A timer wake is derived —
+    // no server event fires when snoozedUntil passes, so updatedAt still
+    // stamps the snooze itself, which always precedes the wake time.
+    // Stamping updatedAt alone would leave lastVisitedAt permanently behind
+    // wokeAt and the sidebar's Woke indicator could never clear. The shell
+    // carries the pending-request flags threadWokeAt needs; without one
+    // (detail-only window) fall back to updatedAt.
+    const wokeAt = routeServerThreadShell
+      ? threadWokeAt(routeServerThreadShell, { now: new Date().toISOString() })
+      : null;
+    const visitedAt =
+      wokeAt !== null && Date.parse(wokeAt) > threadUpdatedAt ? wokeAt : serverThread.updatedAt;
+    const visitedAtMs = Date.parse(visitedAt);
     const lastVisitedAt = activeThreadLastVisitedAt ? Date.parse(activeThreadLastVisitedAt) : NaN;
-    if (!Number.isNaN(lastVisitedAt) && lastVisitedAt >= threadUpdatedAt) return;
+    if (!Number.isNaN(lastVisitedAt) && lastVisitedAt >= visitedAtMs) return;
 
     markThreadVisited(
       scopedThreadKey(scopeThreadRef(serverThread.environmentId, serverThread.id)),
-      serverThread.updatedAt,
+      visitedAt,
     );
   }, [
     activeThreadLastVisitedAt,
     markThreadVisited,
+    routeServerThreadShell,
     serverThread?.environmentId,
     serverThread?.id,
     serverThread?.updatedAt,
