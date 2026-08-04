@@ -189,29 +189,40 @@ export function effectiveSnoozed(
  * the indicator.
  */
 export function threadWokeAt(
-  shell: ThreadSnoozeShell,
+  shell: ThreadSnoozeShell & Pick<OrchestrationThreadShell, "settledOverride" | "settledAt">,
   options: { readonly now: string },
 ): string | null {
   if (shell.snoozedUntil == null) return null;
   const wakeAtMs = Date.parse(shell.snoozedUntil);
   if (Number.isNaN(wakeAtMs)) return null;
-  // An early hand-raise wake stays authoritative even after the scheduled
-  // wake time passes: reporting snoozedUntil then would resurface a Woke
-  // indicator the user already cleared by visiting (snoozedUntil is newer
-  // than that visit's lastVisitedAt).
-  if (threadRaisedHandWhileSnoozed(shell)) {
-    if (
+  const wokeAt = threadRaisedHandWhileSnoozed(shell)
+    ? // An early hand-raise wake stays authoritative even after the scheduled
+      // wake time passes: reporting snoozedUntil then would resurface a Woke
+      // indicator the user already cleared by visiting (snoozedUntil is newer
+      // than that visit's lastVisitedAt).
       shell.snoozedAt != null &&
       shell.latestTurn?.state === "completed" &&
       shell.latestTurn.completedAt != null &&
       Date.parse(shell.latestTurn.completedAt) > Date.parse(shell.snoozedAt)
-    ) {
-      return shell.latestTurn.completedAt;
-    }
-    return shell.session?.updatedAt ?? shell.snoozedAt ?? null;
+      ? shell.latestTurn.completedAt
+      : (shell.session?.updatedAt ?? shell.snoozedAt ?? null)
+    : // No raised hand: woke iff the timer elapsed (still-snoozed → null).
+      wakeAtMs <= Date.parse(options.now)
+      ? shell.snoozedUntil
+      : null;
+  // An explicit settle stamped after the wake acknowledges it the same way
+  // a visit does: the user acted on the woken thread. Auto-settles (closed
+  // PR, inactivity) never stamp settledAt, so a wake that lands straight in
+  // the settled tail keeps its signal.
+  if (
+    wokeAt !== null &&
+    shell.settledOverride === "settled" &&
+    shell.settledAt != null &&
+    Date.parse(shell.settledAt) >= Date.parse(wokeAt)
+  ) {
+    return null;
   }
-  // No raised hand: woke iff the timer elapsed (still-snoozed → null).
-  return wakeAtMs <= Date.parse(options.now) ? shell.snoozedUntil : null;
+  return wokeAt;
 }
 
 /**
