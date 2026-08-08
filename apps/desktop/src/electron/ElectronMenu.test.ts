@@ -113,6 +113,30 @@ describe("ElectronMenu", () => {
     }).pipe(Effect.provide(TestLayer)),
   );
 
+  it.effect("binds item accelerators on leaf items and drops empty ones", () =>
+    Effect.gen(function* () {
+      buildFromTemplateMock.mockImplementation(() => ({
+        popup: (options: Electron.PopupOptions) => {
+          options.callback?.();
+        },
+      }));
+
+      const electronMenu = yield* ElectronMenu.ElectronMenu;
+      yield* electronMenu.showContextMenu({
+        window: makeWindow(2),
+        items: [
+          { id: "copy", label: "Copy", accelerator: "Cmd+C" },
+          { id: "add-to-chat", label: "Add to chat", accelerator: "" },
+        ],
+        position: Option.none(),
+      });
+
+      const template = buildFromTemplateMock.mock.calls[0]?.[0];
+      assert.equal(template[0].accelerator, "Cmd+C");
+      assert.isUndefined(template[1].accelerator);
+    }).pipe(Effect.provide(TestLayer)),
+  );
+
   it.effect("defers popupTemplate side effects until the returned Effect runs", () =>
     Effect.gen(function* () {
       const popupMock = vi.fn();

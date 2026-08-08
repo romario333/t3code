@@ -80,6 +80,10 @@ function normalizeContextMenuItems(source: readonly ContextMenuItem[]): ContextM
       disabled: sourceItem.disabled === true,
     };
 
+    if (typeof sourceItem.accelerator === "string" && sourceItem.accelerator.length > 0) {
+      normalizedItem.accelerator = sourceItem.accelerator;
+    }
+
     if (sourceItem.children) {
       const normalizedChildren = normalizeContextMenuItems(sourceItem.children);
       if (normalizedChildren.length === 0) {
@@ -156,6 +160,13 @@ export const make = Effect.gen(function* () {
         itemOption.submenu = buildTemplate(item.children, complete);
       } else {
         itemOption.click = () => complete(Option.some(item.id));
+        if (item.accelerator !== undefined) {
+          // Bound as the NSMenuItem key equivalent, so on macOS the shortcut
+          // still fires while the popup is tracking (which otherwise swallows
+          // all renderer keyboard input). On Windows/Linux popups the
+          // accelerator is display-only.
+          itemOption.accelerator = item.accelerator;
+        }
       }
       if (item.destructive && (!item.children || item.children.length === 0)) {
         const destructiveIcon = getDestructiveMenuIcon();
