@@ -158,20 +158,26 @@ function firstValidTimestampMs(...candidates: ReadonlyArray<string | null | unde
 }
 
 /**
- * v2 sort: static creation order, newest thread on top. Activity NEVER
- * reorders the list — a row holds its position from open until settled, so
- * the screen only moves at lifecycle transitions. Mirrors web's
+ * v2 sort: last USER activity, most recent on top — the latest user message,
+ * falling back to creation for threads never messaged. Agent activity (turn
+ * completions, background work) NEVER reorders the list, so rows only move
+ * when the user themselves acts on a thread. Mirrors web's
  * sortThreadsForSidebarV2.
  */
-export function sortThreadsForListV2<T extends { readonly id: string; readonly createdAt: string }>(
-  threads: readonly T[],
-): T[] {
+export function sortThreadsForListV2<
+  T extends {
+    readonly id: string;
+    readonly createdAt: string;
+    readonly latestUserMessageAt?: string | null;
+  },
+>(threads: readonly T[]): T[] {
+  const userActivityMs = (thread: T) =>
+    firstValidTimestampMs(thread.latestUserMessageAt, thread.createdAt);
   // .sort() on a copy, not .toSorted(): Hermes doesn't ship the ES2023
   // change-by-copy array methods.
   return [...threads].sort(
     (left, right) =>
-      parseTimestampMs(right.createdAt) - parseTimestampMs(left.createdAt) ||
-      left.id.localeCompare(right.id),
+      userActivityMs(right) - userActivityMs(left) || left.id.localeCompare(right.id),
   );
 }
 
@@ -304,8 +310,8 @@ export function buildThreadListV2ListItems(input: {
 }
 
 /**
- * Partitions visible threads into the active card block (creation order) and
- * the settled recency tail, matching the web v2 list. `autoSettleAfterDays`
+ * Partitions visible threads into the active card block (user-activity
+ * order) and the settled recency tail, matching the web v2 list. `autoSettleAfterDays`
  * mirrors the web default of 3 — mobile has no client-settings sync yet, so
  * the default is fixed here rather than user-configurable.
  */
@@ -383,8 +389,9 @@ export function buildThreadListV2Items(input: {
       input.changeRequestStateByKey?.get(`${thread.environmentId}:${thread.id}`) ?? null;
     // Visibility parity with web: snooze outranks everything, including a
     // pin — a snoozed thread leaves the list until it wakes (or raises its
-    // hand). The pin survives underneath, so a woken thread reappears at
-    // its original spot in the creation-ordered pinned block.
+    // hand). The pin survives underneath, and snoozing doesn't touch the
+    // user-activity order, so a woken thread reappears at its original spot
+    // in the pinned block.
     if (supportsSnooze && effectiveSnoozed(thread, { now: snoozeNow })) {
       snoozed.push(thread);
       if (

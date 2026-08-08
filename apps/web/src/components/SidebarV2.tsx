@@ -2003,8 +2003,9 @@ export default function SidebarV2() {
         const changeRequestState = changeRequestStateByKey.get(threadKey) ?? null;
         // Snooze outranks everything, including a pin: "hide until Tuesday"
         // temporarily suspends "keep on top". The pin survives underneath —
-        // pinned cards are creation-ordered, so on wake the thread reappears
-        // at its original spot in the pinned block. (For unpinned threads
+        // pinned cards order by last user activity, which snoozing doesn't
+        // touch, so on wake the thread reappears at its original spot in the
+        // pinned block. (For unpinned threads
         // this is also the snooze-beats-auto-settle rule: the wake time is a
         // stronger statement about when the thread matters again.)
         if (supportsSnooze && effectiveSnoozed(thread, { now: preciseNow })) {
@@ -2025,7 +2026,7 @@ export default function SidebarV2() {
         }
       }
       return {
-        // Same static creation order as the inbox: a pin freezes prominence,
+        // Same user-activity order as the inbox: a pin freezes prominence,
         // it does not introduce a new ordering scheme.
         pinnedThreads: sortThreadsForSidebarV2(pinned),
         activeThreads: sortThreadsForSidebarV2(active),
