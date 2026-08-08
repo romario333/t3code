@@ -785,22 +785,61 @@ describe("searchSidebarThreadsByTitle", () => {
 });
 
 describe("sortThreadsForSidebar", () => {
-  const sortable = (input: { id: string; createdAt: string }) => ({
+  const sortable = (input: {
+    id: string;
+    createdAt: string;
+    latestUserMessageAt?: string | null;
+  }) => ({
     id: input.id,
     createdAt: input.createdAt,
+    latestUserMessageAt: input.latestUserMessageAt ?? null,
   });
 
-  it("orders by creation time, newest first, ignoring activity", () => {
+  it("orders by latest user message, most recent first", () => {
     const sorted = sortThreadsForSidebar([
-      sortable({ id: "oldest", createdAt: "2026-03-09T08:00:00.000Z" }),
-      sortable({ id: "newest", createdAt: "2026-03-09T12:00:00.000Z" }),
-      sortable({ id: "middle", createdAt: "2026-03-09T10:00:00.000Z" }),
+      sortable({
+        id: "stale",
+        createdAt: "2026-03-09T08:00:00.000Z",
+        latestUserMessageAt: "2026-03-09T09:00:00.000Z",
+      }),
+      sortable({
+        id: "fresh",
+        createdAt: "2026-03-09T07:00:00.000Z",
+        latestUserMessageAt: "2026-03-09T12:00:00.000Z",
+      }),
     ]);
 
-    expect(sorted.map((thread) => thread.id)).toEqual(["newest", "middle", "oldest"]);
+    expect(sorted.map((thread) => thread.id)).toEqual(["fresh", "stale"]);
   });
 
-  it("breaks creation-time ties by id so the order is stable", () => {
+  it("falls back to creation time for threads never messaged", () => {
+    const sorted = sortThreadsForSidebar([
+      sortable({ id: "oldest", createdAt: "2026-03-09T08:00:00.000Z" }),
+      sortable({
+        id: "messaged",
+        createdAt: "2026-03-09T09:00:00.000Z",
+        latestUserMessageAt: "2026-03-09T11:00:00.000Z",
+      }),
+      sortable({ id: "newest", createdAt: "2026-03-09T12:00:00.000Z" }),
+    ]);
+
+    expect(sorted.map((thread) => thread.id)).toEqual(["newest", "messaged", "oldest"]);
+  });
+
+  it("falls back to creation time when the user-message timestamp is malformed", () => {
+    const sorted = sortThreadsForSidebar([
+      sortable({
+        id: "malformed",
+        createdAt: "2026-03-09T10:00:00.000Z",
+        latestUserMessageAt: "not-a-date",
+      }),
+      sortable({ id: "older", createdAt: "2026-03-09T08:00:00.000Z" }),
+    ]);
+
+    expect(sorted.map((thread) => thread.id)).toEqual(["malformed", "older"]);
+  });
+
+  it("breaks timestamp ties by id so the order is stable", () => {
     const sorted = sortThreadsForSidebar([
       sortable({ id: "b", createdAt: "2026-03-09T10:00:00.000Z" }),
       sortable({ id: "a", createdAt: "2026-03-09T10:00:00.000Z" }),
