@@ -531,24 +531,30 @@ export function firstValidTimestamp(
   return null;
 }
 
-// Sidebar sort: static order, newest anchor on top. Activity NEVER reorders
-// the list — a row holds its position between lifecycle transitions, so the
-// screen only moves when a thread enters or leaves the active list. The
-// anchor is creation time until an un-settle re-anchors it (see
-// activeThreadAnchorTimestampMs), so an un-settled thread surfaces at the
-// top instead of sinking back to its creation-order slot. Status (including
+// Sidebar sort: last USER activity, most recent on top — the latest user
+// message, falling back to creation for threads never messaged, re-anchored to
+// unsettledAt when a thread re-enters the active list (see
+// activeThreadAnchorTimestampMs) so it surfaces at the top instead of sinking
+// back to its old slot. Agent activity (turn completions, background work)
+// NEVER reorders the list, so rows only move when the user themselves acts on
+// a thread and the screen stays put while agents run. Status (including
 // pending approval) is carried by each card's edge strip, not by position.
 export function sortThreadsForSidebar<
   T extends {
     readonly id: string;
     readonly createdAt: string;
     readonly unsettledAt?: string | null | undefined;
+    readonly latestUserMessageAt?: string | null;
   },
 >(threads: readonly T[]): T[] {
+  const userActivityMs = (thread: T) =>
+    Math.max(
+      firstValidTimestampMs(thread.latestUserMessageAt, thread.createdAt),
+      activeThreadAnchorTimestampMs(thread),
+    );
   return [...threads].toSorted(
     (left, right) =>
-      activeThreadAnchorTimestampMs(right) - activeThreadAnchorTimestampMs(left) ||
-      left.id.localeCompare(right.id),
+      userActivityMs(right) - userActivityMs(left) || left.id.localeCompare(right.id),
   );
 }
 
