@@ -161,26 +161,32 @@ function firstValidTimestampMs(...candidates: ReadonlyArray<string | null | unde
 }
 
 /**
- * v2 sort: static order, newest anchor on top. Activity NEVER reorders the
- * list — a row holds its position between lifecycle transitions. The anchor
- * is creation time until an un-settle re-anchors it (see
- * activeThreadAnchorTimestampMs), so an un-settled thread surfaces at the
- * top instead of sinking back to its creation-order slot. Mirrors web's
- * sortThreadsForSidebar.
+ * v2 sort: last USER activity, most recent on top — the latest user message,
+ * falling back to creation for threads never messaged, re-anchored to
+ * unsettledAt when a thread re-enters the active list (see
+ * activeThreadAnchorTimestampMs) so it surfaces at the top instead of sinking
+ * back to its old slot. Agent activity (turn completions, background work)
+ * NEVER reorders the list, so rows only move when the user themselves acts on
+ * a thread. Mirrors web's sortThreadsForSidebar.
  */
 export function sortThreadsForListV2<
   T extends {
     readonly id: string;
     readonly createdAt: string;
     readonly unsettledAt?: string | null | undefined;
+    readonly latestUserMessageAt?: string | null;
   },
 >(threads: readonly T[]): T[] {
+  const userActivityMs = (thread: T) =>
+    Math.max(
+      firstValidTimestampMs(thread.latestUserMessageAt, thread.createdAt),
+      activeThreadAnchorTimestampMs(thread),
+    );
   // .sort() on a copy, not .toSorted(): Hermes doesn't ship the ES2023
   // change-by-copy array methods.
   return [...threads].sort(
     (left, right) =>
-      activeThreadAnchorTimestampMs(right) - activeThreadAnchorTimestampMs(left) ||
-      left.id.localeCompare(right.id),
+      userActivityMs(right) - userActivityMs(left) || left.id.localeCompare(right.id),
   );
 }
 
@@ -313,8 +319,8 @@ export function buildThreadListV2ListItems(input: {
 }
 
 /**
- * Partitions visible threads into the active card block (creation order) and
- * the settled recency tail, matching the web v2 list.
+ * Partitions visible threads into the active card block (user-activity
+ * order) and the settled recency tail, matching the web v2 list.
  */
 export function buildThreadListV2Items(input: {
   readonly threads: ReadonlyArray<EnvironmentThreadShell>;

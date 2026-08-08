@@ -258,13 +258,33 @@ describe("resolveThreadListV2SnoozeGateExpiryMs", () => {
 });
 
 describe("sortThreadsForListV2", () => {
-  it("orders by creation time, newest first, ignoring activity", () => {
+  it("orders by latest user message, most recent first", () => {
+    const sorted = sortThreadsForListV2([
+      {
+        id: "stale",
+        createdAt: "2026-06-01T08:00:00.000Z",
+        latestUserMessageAt: "2026-06-01T09:00:00.000Z",
+      },
+      {
+        id: "fresh",
+        createdAt: "2026-06-01T07:00:00.000Z",
+        latestUserMessageAt: "2026-06-01T12:00:00.000Z",
+      },
+    ]);
+    expect(sorted.map((thread) => thread.id)).toEqual(["fresh", "stale"]);
+  });
+
+  it("falls back to creation time for threads never messaged", () => {
     const sorted = sortThreadsForListV2([
       { id: "oldest", createdAt: "2026-06-01T08:00:00.000Z" },
+      {
+        id: "messaged",
+        createdAt: "2026-06-01T09:00:00.000Z",
+        latestUserMessageAt: "2026-06-01T11:00:00.000Z",
+      },
       { id: "newest", createdAt: "2026-06-01T12:00:00.000Z" },
-      { id: "middle", createdAt: "2026-06-01T10:00:00.000Z" },
     ]);
-    expect(sorted.map((thread) => thread.id)).toEqual(["newest", "middle", "oldest"]);
+    expect(sorted.map((thread) => thread.id)).toEqual(["newest", "messaged", "oldest"]);
   });
 
   it("surfaces an un-settled thread at the top via its re-entry stamp", () => {
@@ -324,7 +344,7 @@ describe("buildThreadListV2Items", () => {
       now: NOW,
     });
 
-    // Same createdAt → static sort tiebreaks by id; the point is the woken
+    // No user messages and same createdAt → sort tiebreaks by id; the point is the woken
     // thread is BACK in the card block and the snoozed one is gone.
     expect(layout.items.map((item) => item.thread.id)).toEqual(["active", "woken"]);
     expect(layout.snoozedCount).toBe(1);
@@ -618,14 +638,14 @@ describe("buildThreadListV2Items", () => {
     expect(layout.settledShelfHeaderIndex).toBe(0);
   });
 
-  it("keeps cards in creation order while settled sorts by recency", () => {
+  it("keeps agent activity from promoting cards while settled sorts by recency", () => {
     const { items } = buildThreadListV2Items({
       threads: [
         makeThread({
           id: ThreadId.make("older-created"),
           title: "Older",
           createdAt: "2026-06-01T08:00:00.000Z",
-          updatedAt: NOW, // recent activity must NOT promote it
+          updatedAt: NOW, // recent AGENT activity must NOT promote it
         }),
         makeThread({
           id: ThreadId.make("newer-created"),
