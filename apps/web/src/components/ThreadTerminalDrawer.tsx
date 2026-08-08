@@ -34,7 +34,7 @@ import {
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Button } from "~/components/ui/button";
 import { readTextFromClipboard, writeTextToClipboard } from "~/hooks/useCopyToClipboard";
-import { cn } from "~/lib/utils";
+import { cn, isMacPlatform } from "~/lib/utils";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import {
   GhosttyTerminalSurface,
@@ -234,6 +234,12 @@ export function resolveTerminalSelectionActionPosition(options: {
   };
 }
 
+// Must mirror isTerminalCopyShortcut so the shortcut that copies while the
+// terminal has focus is the same one bound to the popup's Copy item.
+export function terminalSelectionCopyAccelerator(platform: string = navigator.platform): string {
+  return isMacPlatform(platform) ? "Cmd+C" : "Ctrl+Shift+C";
+}
+
 export function terminalSelectionActionDelayForClickCount(clickCount: number): number {
   return clickCount >= 2 ? MULTI_CLICK_SELECTION_ACTION_DELAY_MS : 0;
 }
@@ -262,7 +268,10 @@ export type TerminalContextMenuAction = "add-to-chat" | "copy" | "paste";
 export function terminalSelectionMenuItems(): ContextMenuItem<"add-to-chat" | "copy">[] {
   return [
     { id: "add-to-chat", label: "Add to chat" },
-    { id: "copy", label: "Copy" },
+    // The native popup swallows renderer keydowns while open, so the copy
+    // shortcut must be registered on the menu item itself to keep Cmd+C
+    // working after a selection opens the popup.
+    { id: "copy", label: "Copy", accelerator: terminalSelectionCopyAccelerator() },
   ];
 }
 
