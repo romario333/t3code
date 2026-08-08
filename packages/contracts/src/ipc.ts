@@ -111,6 +111,12 @@ export interface ContextMenuItem<T extends string = string> {
   header?: boolean;
   /** Icon keyword resolved by the web fallback. Stripped on desktop native menus. */
   icon?: string;
+  /**
+   * Electron accelerator (e.g. "Cmd+C") bound to the native menu item. While a
+   * native popup is open it swallows all renderer keyboard input, so a shortcut
+   * that should keep working over the popup must be registered here.
+   */
+  accelerator?: string;
   children?: readonly ContextMenuItem<T>[];
 }
 
@@ -121,6 +127,7 @@ export interface ContextMenuItemSchemaType {
   readonly disabled?: boolean;
   readonly header?: boolean;
   readonly icon?: string;
+  readonly accelerator?: string;
   readonly children?: readonly ContextMenuItemSchemaType[];
 }
 
@@ -131,6 +138,7 @@ export const ContextMenuItemSchema: Schema.Codec<ContextMenuItemSchemaType> = Sc
   disabled: Schema.optionalKey(Schema.Boolean),
   header: Schema.optionalKey(Schema.Boolean),
   icon: Schema.optionalKey(Schema.String),
+  accelerator: Schema.optionalKey(Schema.String),
   children: Schema.optionalKey(
     Schema.Array(
       Schema.suspend((): Schema.Codec<ContextMenuItemSchemaType> => ContextMenuItemSchema),

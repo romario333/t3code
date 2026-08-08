@@ -5,6 +5,7 @@ import {
   shouldHandleTerminalExit,
   shouldHandleTerminalSelectionMouseUp,
   terminalSelectionActionDelayForClickCount,
+  terminalSelectionCopyAccelerator,
   terminalSelectionLineRange,
 } from "./ThreadTerminalDrawer";
 
@@ -67,6 +68,12 @@ describe("resolveTerminalSelectionActionPosition", () => {
     expect(terminalSelectionActionDelayForClickCount(1)).toBe(0);
     expect(terminalSelectionActionDelayForClickCount(2)).toBe(260);
     expect(terminalSelectionActionDelayForClickCount(3)).toBe(260);
+  });
+
+  it("binds the platform terminal copy shortcut to the popup's Copy item", () => {
+    expect(terminalSelectionCopyAccelerator("MacIntel")).toBe("Cmd+C");
+    expect(terminalSelectionCopyAccelerator("Win32")).toBe("Ctrl+Shift+C");
+    expect(terminalSelectionCopyAccelerator("Linux x86_64")).toBe("Ctrl+Shift+C");
   });
 
   it("only handles mouseup when the selection gesture started in the terminal", () => {
