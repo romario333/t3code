@@ -538,17 +538,24 @@ export function firstValidTimestamp(
   return null;
 }
 
-// Sidebar sort: static creation order, newest thread on top. Activity NEVER
-// reorders the list — a row holds its position from open until settled, so
-// the screen only moves at lifecycle transitions. Status (including pending
-// approval) is carried by each card's edge strip, not by position.
+// Sidebar sort: last USER activity, most recent on top — the latest user
+// message, falling back to creation for threads never messaged. Agent activity
+// (turn completions, background work) NEVER reorders the list, so rows only
+// move when the user themselves acts on a thread and the screen stays put
+// while agents run. Status (including pending approval) is carried by each
+// card's edge strip, not by position.
 export function sortThreadsForSidebar<
-  T extends { readonly id: string; readonly createdAt: string },
+  T extends {
+    readonly id: string;
+    readonly createdAt: string;
+    readonly latestUserMessageAt?: string | null;
+  },
 >(threads: readonly T[]): T[] {
+  const userActivityMs = (thread: T) =>
+    firstValidTimestampMs(thread.latestUserMessageAt, thread.createdAt);
   return [...threads].toSorted(
     (left, right) =>
-      parseTimestampMs(right.createdAt) - parseTimestampMs(left.createdAt) ||
-      left.id.localeCompare(right.id),
+      userActivityMs(right) - userActivityMs(left) || left.id.localeCompare(right.id),
   );
 }
 
