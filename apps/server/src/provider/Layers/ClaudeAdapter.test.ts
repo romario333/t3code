@@ -2031,6 +2031,196 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
+  it.effect("recycles the session when session-fixed options change between turns", () => {
+    const queries: FakeClaudeQuery[] = [];
+    const createInputs: Array<{
+      readonly prompt: AsyncIterable<SDKUserMessage>;
+      readonly options: ClaudeQueryOptions;
+    }> = [];
+    const layer = Layer.effect(
+      ClaudeAdapter,
+      Effect.gen(function* () {
+        const claudeConfig = decodeClaudeSettings({});
+        return yield* makeClaudeAdapter(claudeConfig, {
+          createQuery: (input) => {
+            createInputs.push(input);
+            const query = new FakeClaudeQuery();
+            queries.push(query);
+            return query;
+          },
+        });
+      }),
+    ).pipe(
+      Layer.provideMerge(ServerConfig.layerTest("/tmp/claude-adapter-test", "/tmp")),
+      Layer.provideMerge(ServerSettingsService.layerTest()),
+      Layer.provideMerge(NodeServices.layer),
+    );
+
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        modelSelection: createModelSelection(
+          ProviderInstanceId.make("claudeAgent"),
+          "claude-fable-5",
+          [{ id: "effort", value: "high" }],
+        ),
+        runtimeMode: "full-access",
+      });
+      assert.equal(createInputs[0]?.options.effort, "high");
+      const firstSessionId = createInputs[0]?.options.sessionId;
+      assert.ok(firstSessionId);
+
+      const turn = yield* adapter.sendTurn({
+        threadId: THREAD_ID,
+        input: "Continue with new options",
+        modelSelection: createModelSelection(
+          ProviderInstanceId.make("claudeAgent"),
+          "claude-fable-5",
+          [
+            { id: "effort", value: "max" },
+            { id: "outputStyle", value: "Explanatory" },
+          ],
+        ),
+      });
+
+      assert.equal(queries.length, 2);
+      assert.equal(queries[0]?.closeCalls, 1);
+      assert.equal(queries[1]?.closeCalls, 0);
+      assert.equal(createInputs[1]?.options.effort, "max");
+      assert.equal(
+        (createInputs[1]?.options.settings as { outputStyle?: string } | undefined)?.outputStyle,
+        "Explanatory",
+      );
+      // The replacement query resumes the first query's CLI session, so
+      // conversation history survives the recycle.
+      assert.equal(createInputs[1]?.options.resume, firstSessionId);
+      // The turn's user message must reach the replacement query, not the
+      // closed one.
+      assert.equal(
+        yield* Effect.promise(() => readFirstPromptText(createInputs[1])),
+        "Continue with new options",
+      );
+      assert.equal(turn.threadId, THREAD_ID);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(layer),
+    );
+  });
+
+  it.effect("does not recycle the session when session-fixed options are unchanged", () => {
+    const queries: FakeClaudeQuery[] = [];
+    const layer = Layer.effect(
+      ClaudeAdapter,
+      Effect.gen(function* () {
+        const claudeConfig = decodeClaudeSettings({});
+        return yield* makeClaudeAdapter(claudeConfig, {
+          createQuery: () => {
+            const query = new FakeClaudeQuery();
+            queries.push(query);
+            return query;
+          },
+        });
+      }),
+    ).pipe(
+      Layer.provideMerge(ServerConfig.layerTest("/tmp/claude-adapter-test", "/tmp")),
+      Layer.provideMerge(ServerSettingsService.layerTest()),
+      Layer.provideMerge(NodeServices.layer),
+    );
+
+    const modelSelection = () =>
+      createModelSelection(ProviderInstanceId.make("claudeAgent"), "claude-fable-5", [
+        { id: "effort", value: "high" },
+      ]);
+
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        modelSelection: modelSelection(),
+        runtimeMode: "full-access",
+      });
+
+      yield* adapter.sendTurn({
+        threadId: THREAD_ID,
+        input: "Same options",
+        modelSelection: modelSelection(),
+      });
+
+      assert.equal(queries.length, 1);
+      assert.equal(queries[0]?.closeCalls, 0);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(layer),
+    );
+  });
+
+  it.effect("does not recycle the session while a real turn is running (steer)", () => {
+    const queries: FakeClaudeQuery[] = [];
+    const layer = Layer.effect(
+      ClaudeAdapter,
+      Effect.gen(function* () {
+        const claudeConfig = decodeClaudeSettings({});
+        return yield* makeClaudeAdapter(claudeConfig, {
+          createQuery: () => {
+            const query = new FakeClaudeQuery();
+            queries.push(query);
+            return query;
+          },
+        });
+      }),
+    ).pipe(
+      Layer.provideMerge(ServerConfig.layerTest("/tmp/claude-adapter-test", "/tmp")),
+      Layer.provideMerge(ServerSettingsService.layerTest()),
+      Layer.provideMerge(NodeServices.layer),
+    );
+
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        modelSelection: createModelSelection(
+          ProviderInstanceId.make("claudeAgent"),
+          "claude-fable-5",
+          [{ id: "effort", value: "high" }],
+        ),
+        runtimeMode: "full-access",
+      });
+
+      const firstTurn = yield* adapter.sendTurn({
+        threadId: THREAD_ID,
+        input: "Start a turn",
+        modelSelection: createModelSelection(
+          ProviderInstanceId.make("claudeAgent"),
+          "claude-fable-5",
+          [{ id: "effort", value: "high" }],
+        ),
+      });
+
+      // The first turn is still running; a mid-turn sendTurn with different
+      // options is a steer and must not tear down the live query.
+      const steer = yield* adapter.sendTurn({
+        threadId: THREAD_ID,
+        input: "Steer with new options",
+        modelSelection: createModelSelection(
+          ProviderInstanceId.make("claudeAgent"),
+          "claude-fable-5",
+          [{ id: "effort", value: "max" }],
+        ),
+      });
+
+      assert.equal(queries.length, 1);
+      assert.equal(queries[0]?.closeCalls, 0);
+      assert.equal(steer.turnId, firstTurn.turnId);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(layer),
+    );
+  });
+
   it.effect("stopSession does not throw into the SDK prompt consumer", () => {
     // The SDK consumes user messages via `for await (... of prompt)`.
     // Stopping a session must end that loop cleanly — not throw an error.

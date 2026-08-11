@@ -11,6 +11,7 @@ import {
   getProviderOptionDescriptors,
   isClaudeUltrathinkPrompt,
 } from "@t3tools/shared/model";
+import { getClaudeOutputStyleSelections } from "@t3tools/shared/outputStyles";
 import type { ReactNode } from "react";
 
 import type { DraftId } from "../../composerDraftStore";
@@ -65,11 +66,20 @@ export function getComposerProviderState(input: ComposerProviderStateInput): Com
   const ultrathinkActive =
     (primarySelectDescriptor?.promptInjectedValues?.length ?? 0) > 0 &&
     promptInjectionState === "ultrathink";
+  // Output-style selections have no server-declared descriptor (custom styles
+  // are client-defined), so rebuild-from-descriptors would silently drop them.
+  const descriptorSelections = buildProviderOptionSelectionsFromDescriptors(descriptors);
+  const outputStyleSelections =
+    provider === "claudeAgent" ? getClaudeOutputStyleSelections(modelOptions) : [];
+  const modelOptionsForDispatch =
+    outputStyleSelections.length > 0
+      ? [...(descriptorSelections ?? []), ...outputStyleSelections]
+      : descriptorSelections;
 
   return {
     provider,
     promptEffort,
-    modelOptionsForDispatch: buildProviderOptionSelectionsFromDescriptors(descriptors),
+    modelOptionsForDispatch,
     ...(ultrathinkActive
       ? {
           composerFrameClassName: "ultrathink-frame",

@@ -88,6 +88,11 @@ import { ProviderModelPicker } from "./ProviderModelPicker";
 import { type ComposerCommandItem, ComposerCommandMenu } from "./ComposerCommandMenu";
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
+import {
+  OutputStyleMenuContent,
+  OutputStylePicker,
+  shouldRenderOutputStyleControl,
+} from "./OutputStylePicker";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
 import { ComposerPendingApprovalPanel } from "./ComposerPendingApprovalPanel";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
@@ -1243,6 +1248,21 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     prompt,
     onPromptChange: setPromptFromTraits,
   });
+  const showOutputStyleControl = shouldRenderOutputStyleControl(selectedProvider);
+  const outputStylePickerProps = {
+    provider: selectedProvider,
+    instanceId: selectedInstanceId,
+    ...(routeKind === "server" ? { threadRef: routeThreadRef } : {}),
+    ...(routeKind === "draft" && draftId ? { draftId } : {}),
+    model: selectedModel,
+    modelOptions: composerModelOptions?.[selectedInstanceId],
+  };
+  const outputStylePicker = showOutputStyleControl ? (
+    <OutputStylePicker {...outputStylePickerProps} />
+  ) : null;
+  const outputStyleMenuContent = showOutputStyleControl ? (
+    <OutputStyleMenuContent {...outputStylePickerProps} />
+  ) : null;
   const pendingPrimaryAction = useMemo(
     () =>
       activePendingProgress
@@ -3177,6 +3197,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     runtimeMode={runtimeMode}
                     showInteractionModeToggle={composerProviderControls.showInteractionModeToggle}
                     traitsMenuContent={providerTraitsMenuContent}
+                    outputStyleMenuContent={outputStyleMenuContent}
                     onToggleInteractionMode={toggleInteractionMode}
                     onRuntimeModeChange={handleRuntimeModeChange}
                   />
@@ -3188,6 +3209,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                         {providerTraitsPicker}
                       </>
                     ) : null}
+                    {outputStylePicker}
                     <ComposerFooterModeControls
                       showInteractionModeToggle={composerProviderControls.showInteractionModeToggle}
                       interactionMode={interactionMode}

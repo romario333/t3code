@@ -14,6 +14,7 @@ import {
   getProviderOptionDescriptors,
   isClaudeUltrathinkPrompt,
 } from "@t3tools/shared/model";
+import { getClaudeOutputStyleSelections } from "@t3tools/shared/outputStyles";
 import { memo, useCallback, useState } from "react";
 import type { VariantProps } from "class-variance-authority";
 import { ZapIcon } from "lucide-react";
@@ -265,7 +266,16 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
     allowPromptInjectedEffort,
   });
   const updateDescriptors = (nextDescriptors: ReadonlyArray<ProviderOptionDescriptor>) => {
-    updateModelOptions(buildProviderOptionSelectionsFromDescriptors(nextDescriptors));
+    const descriptorSelections = buildProviderOptionSelectionsFromDescriptors(nextDescriptors);
+    // Output-style selections have no descriptor, so rebuilding from
+    // descriptors alone would erase them from the stored options.
+    const outputStyleSelections =
+      provider === "claudeAgent" ? getClaudeOutputStyleSelections(modelOptions) : [];
+    updateModelOptions(
+      outputStyleSelections.length > 0
+        ? [...(descriptorSelections ?? []), ...outputStyleSelections]
+        : descriptorSelections,
+    );
   };
 
   const handleSelectChange = (

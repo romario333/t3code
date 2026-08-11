@@ -78,6 +78,11 @@ import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import { resolveClaudeSdkExecutablePath } from "../Drivers/ClaudeExecutable.ts";
 import { makeClaudeEnvironment } from "../Drivers/ClaudeHome.ts";
 import {
+  CLAUDE_OUTPUT_STYLE_CONTENT_OPTION_ID,
+  CLAUDE_OUTPUT_STYLE_OPTION_ID,
+  prepareClaudeOutputStyle,
+} from "../Drivers/ClaudeOutputStyles.ts";
+import {
   getClaudeModelCapabilities,
   isClaudeUltracodeEffort,
   normalizeClaudeCliEffort,
@@ -225,6 +230,12 @@ interface ClaudeSessionContext {
   /** Effective effort for the session's turns; subagents without an explicit
    * effort override inherit this. */
   currentEffort: string | undefined;
+  /**
+   * Fingerprint of the session-fixed options the query was created with.
+   * sendTurn compares against it to decide whether the session must be
+   * recycled for new options to take effect.
+   */
+  readonly sessionOptionsFingerprint: string;
   resumeSessionId: string | undefined;
   readonly pendingApprovals: Map<ApprovalRequestId, PendingApproval>;
   readonly pendingUserInputs: Map<ApprovalRequestId, PendingUserInput>;
@@ -332,6 +343,72 @@ function getEffectiveClaudeAgentEffort(
 ): ClaudeSdkEffort | null {
   const normalized = normalizeClaudeCliEffort(effort, model);
   return normalized ? (normalized as ClaudeSdkEffort) : null;
+}
+
+/**
+ * Options that are baked into the SDK query at creation time. The runtime
+ * control protocol only exposes setModel/setPermissionMode, so a change to
+ * any of these requires recreating the query (resuming the CLI session by
+ * id) before it takes effect.
+ */
+interface ClaudeSessionFixedOptions {
+  readonly effectiveEffort: ClaudeSdkEffort | null;
+  readonly fastMode: boolean;
+  readonly thinking: boolean | undefined;
+  readonly ultracode: boolean;
+  readonly outputStyleName: string | undefined;
+  readonly outputStyleContent: string | undefined;
+}
+
+function deriveClaudeSessionFixedOptions(
+  modelSelection: ModelSelection | undefined,
+): ClaudeSessionFixedOptions {
+  const caps = getClaudeModelCapabilities(modelSelection?.model);
+  const descriptors = getProviderOptionDescriptors({ caps });
+  const rawEffort = getModelSelectionStringOptionValue(modelSelection, "effort");
+  const effort = resolveClaudeEffort(caps, rawEffort) ?? null;
+  const fastModeSupported = descriptors.some(
+    (descriptor) => descriptor.type === "boolean" && descriptor.id === "fastMode",
+  );
+  const thinkingSupported = descriptors.some(
+    (descriptor) => descriptor.type === "boolean" && descriptor.id === "thinking",
+  );
+  return {
+    effectiveEffort: getEffectiveClaudeAgentEffort(effort, modelSelection?.model),
+    fastMode:
+      getModelSelectionBooleanOptionValue(modelSelection, "fastMode") === true && fastModeSupported,
+    thinking: thinkingSupported
+      ? getModelSelectionBooleanOptionValue(modelSelection, "thinking")
+      : undefined,
+    ultracode: isClaudeUltracodeEffort(effort),
+    outputStyleName: getModelSelectionStringOptionValue(
+      modelSelection,
+      CLAUDE_OUTPUT_STYLE_OPTION_ID,
+    ),
+    outputStyleContent: getModelSelectionStringOptionValue(
+      modelSelection,
+      CLAUDE_OUTPUT_STYLE_CONTENT_OPTION_ID,
+    ),
+  };
+}
+
+/**
+ * Fingerprint of the raw session-fixed option selections. Deliberately built
+ * from the user's explicit values rather than the model-derived effective
+ * ones: a bare model switch changes derived defaults but is already handled
+ * per-turn via setModel, and must not force a recycle.
+ */
+function claudeSessionFixedOptionsFingerprint(modelSelection: ModelSelection | undefined): string {
+  return JSON.stringify({
+    effort: getModelSelectionStringOptionValue(modelSelection, "effort") ?? null,
+    fastMode: getModelSelectionBooleanOptionValue(modelSelection, "fastMode") ?? null,
+    thinking: getModelSelectionBooleanOptionValue(modelSelection, "thinking") ?? null,
+    outputStyle:
+      getModelSelectionStringOptionValue(modelSelection, CLAUDE_OUTPUT_STYLE_OPTION_ID) ?? null,
+    outputStyleContent:
+      getModelSelectionStringOptionValue(modelSelection, CLAUDE_OUTPUT_STYLE_CONTENT_OPTION_ID) ??
+      null,
+  });
 }
 
 function isClaudeInterruptedMessage(message: string): boolean {
@@ -4120,26 +4197,20 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       const extraArgs = parseCliArgs(claudeSettings.launchArgs).flags;
       const modelSelection =
         input.modelSelection?.instanceId === boundInstanceId ? input.modelSelection : undefined;
-      const caps = getClaudeModelCapabilities(modelSelection?.model);
-      const descriptors = getProviderOptionDescriptors({ caps });
       const apiModelId = modelSelection ? resolveClaudeApiModelId(modelSelection) : undefined;
       const initialContextWindow = selectedClaudeContextWindow(modelSelection);
-      const rawEffort = getModelSelectionStringOptionValue(modelSelection, "effort");
-      const effort = resolveClaudeEffort(caps, rawEffort) ?? null;
-      const fastModeSupported = descriptors.some(
-        (descriptor) => descriptor.type === "boolean" && descriptor.id === "fastMode",
-      );
-      const thinkingSupported = descriptors.some(
-        (descriptor) => descriptor.type === "boolean" && descriptor.id === "thinking",
-      );
-      const fastMode =
-        getModelSelectionBooleanOptionValue(modelSelection, "fastMode") === true &&
-        fastModeSupported;
-      const thinking = thinkingSupported
-        ? getModelSelectionBooleanOptionValue(modelSelection, "thinking")
-        : undefined;
-      const ultracode = isClaudeUltracodeEffort(effort);
-      const effectiveEffort = getEffectiveClaudeAgentEffort(effort, modelSelection?.model);
+      const sessionFixedOptions = deriveClaudeSessionFixedOptions(modelSelection);
+      const { fastMode, thinking, ultracode, effectiveEffort } = sessionFixedOptions;
+      const outputStyle = sessionFixedOptions.outputStyleName
+        ? yield* prepareClaudeOutputStyle({
+            styleName: sessionFixedOptions.outputStyleName,
+            styleContent: sessionFixedOptions.outputStyleContent,
+            stateDir: serverConfig.stateDir,
+          }).pipe(
+            Effect.provideService(FileSystem.FileSystem, fileSystem),
+            Effect.provideService(Path.Path, path),
+          )
+        : null;
       const runtimeModeToPermission: Record<string, PermissionMode> = {
         "auto-accept-edits": "acceptEdits",
         auto: "auto",
@@ -4150,6 +4221,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         ...(typeof thinking === "boolean" ? { alwaysThinkingEnabled: thinking } : {}),
         ...(fastMode ? { fastMode: true } : {}),
         ...(ultracode ? { ultracode: true } : {}),
+        ...(outputStyle ? { outputStyle: outputStyle.outputStyle } : {}),
       };
       const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
       // The attachments dir grant lets the agent Read/copy pasted images at
@@ -4178,6 +4250,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           ? { allowDangerouslySkipPermissions: true }
           : {}),
         ...(Object.keys(settings).length > 0 ? { settings } : {}),
+        ...(outputStyle?.pluginPath
+          ? { plugins: [{ type: "local" as const, path: outputStyle.pluginPath }] }
+          : {}),
         ...(existingResumeSessionId ? { resume: existingResumeSessionId } : {}),
         ...(newSessionId ? { sessionId: newSessionId } : {}),
         includePartialMessages: true,
@@ -4213,6 +4288,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         "claude.query.cwd": input.cwd ?? "",
         "claude.query.model": apiModelId ?? "",
         "claude.query.effort": effectiveEffort ?? "",
+        "claude.query.output_style": outputStyle?.outputStyle ?? "",
         "claude.query.permission_mode": permissionMode ?? "",
         "claude.query.allow_dangerously_skip_permissions": permissionMode === "bypassPermissions",
         "claude.query.resume": existingResumeSessionId ?? "",
@@ -4268,6 +4344,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         basePermissionMode: permissionMode,
         currentApiModelId: apiModelId,
         currentEffort: effectiveEffort ?? undefined,
+        sessionOptionsFingerprint: claudeSessionFixedOptionsFingerprint(modelSelection),
         resumeSessionId: sessionId,
         pendingApprovals,
         pendingUserInputs,
@@ -4369,7 +4446,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   );
 
   const sendTurn: ClaudeAdapterShape["sendTurn"] = Effect.fn("sendTurn")(function* (input) {
-    const context = yield* requireSession(input.threadId);
+    let context = yield* requireSession(input.threadId);
     const modelSelection =
       input.modelSelection !== undefined && input.modelSelection.instanceId === boundInstanceId
         ? input.modelSelection
@@ -4384,6 +4461,42 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       context.turnState && context.turnState.synthetic !== true ? context.turnState : null;
     if (context.turnState && steeringTurnState === null) {
       yield* completeTurn(context, "completed");
+    }
+
+    // Session-fixed options (effort, fast mode, thinking, ultracode, output
+    // style) are baked into the SDK query at creation and the runtime control
+    // protocol cannot change them. When a turn arrives with different values
+    // and no real turn is live, recycle the session: the CLI conversation is
+    // resumed by id, so history is preserved while the new options apply.
+    // During a steer the live turn keeps its options, and live background
+    // tasks veto the recycle (closing the query would kill them, mirroring
+    // the session reaper's guard); the change lands on a later turn.
+    if (
+      modelSelection !== undefined &&
+      steeringTurnState === null &&
+      context.liveTaskIds.size === 0
+    ) {
+      const nextFingerprint = claudeSessionFixedOptionsFingerprint(modelSelection);
+      if (nextFingerprint !== context.sessionOptionsFingerprint) {
+        yield* updateResumeCursor(context);
+        const sessionSnapshot = context.session;
+        yield* Effect.logInfo("claude.session.recycle-for-options", {
+          threadId: input.threadId,
+        });
+        yield* startSession({
+          threadId: input.threadId,
+          runtimeMode: sessionSnapshot.runtimeMode,
+          ...(sessionSnapshot.providerInstanceId
+            ? { providerInstanceId: sessionSnapshot.providerInstanceId }
+            : {}),
+          ...(sessionSnapshot.cwd ? { cwd: sessionSnapshot.cwd } : {}),
+          modelSelection,
+          ...(sessionSnapshot.resumeCursor !== undefined
+            ? { resumeCursor: sessionSnapshot.resumeCursor }
+            : {}),
+        });
+        context = yield* requireSession(input.threadId);
+      }
     }
 
     if (modelSelection?.model) {

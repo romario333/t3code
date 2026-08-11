@@ -180,6 +180,43 @@ describe("getComposerProviderState", () => {
     });
   });
 
+  it("forwards Claude output-style selections through dispatch despite having no descriptor", () => {
+    const claudeProvider = ProviderDriverKind.make("claudeAgent");
+    const state = getComposerProviderState({
+      provider: claudeProvider,
+      model: MODEL,
+      models: modelWith([
+        selectDescriptor("effort", [{ id: "high", label: "High", isDefault: true }]),
+      ]),
+      modelOptions: selections(
+        ["effort", "high"],
+        ["outputStyle", "My Style"],
+        ["outputStyleContent", "Respond briefly."],
+      ),
+    });
+
+    expect(state.modelOptionsForDispatch).toEqual(
+      selections(
+        ["effort", "high"],
+        ["outputStyle", "My Style"],
+        ["outputStyleContent", "Respond briefly."],
+      ),
+    );
+  });
+
+  it("does not forward output-style selections for non-Claude providers", () => {
+    const state = getComposerProviderState({
+      provider: PROVIDER,
+      model: MODEL,
+      models: modelWith([
+        selectDescriptor("effort", [{ id: "high", label: "High", isDefault: true }]),
+      ]),
+      modelOptions: selections(["outputStyle", "My Style"]),
+    });
+
+    expect(state.modelOptionsForDispatch).toEqual(selections(["effort", "high"]));
+  });
+
   it("adds ultrathink class names when the prompt triggers a promptInjectedValues descriptor", () => {
     const state = getComposerProviderState({
       provider: PROVIDER,
