@@ -88,8 +88,9 @@ Keeping the old `.dmg` around allows instant rollback without rebuilding.
 ```sh
 ./build.sh       # desktop dmg (arm64) -> release/, versioned <base>-auto.1
 ./build.sh 3     # bump the build number when rebuilding on the same base
-# CLI:
-T3CODE_UPSTREAM_BASE=<base-tag> node apps/server/scripts/cli.ts build && npm i -g ./apps/server
+# CLI (builds web + server, then installs globally so it runs as `t3`;
+# reads the base tag from build.sh):
+make cli
 ```
 
 `T3CODE_UPSTREAM_BASE` drives the in-app "new upstream release" sidebar pill;
