@@ -99,6 +99,10 @@ Open **Pull requests** to review changes and comments, request reviewers, check 
 or merge. You can edit review titles and descriptions and your own comments where the host allows it.
 GitLab calls these merge requests.
 
+To keep a repository off the **Pull requests** page, untick it under **Repositories** in the filter
+menu. A hidden repository is never queried, and the choice covers every worktree and copy of it
+until you tick it back.
+
 GitHub, GitLab, and Azure DevOps support auto-merge while checks are outstanding. GitHub also
 supports approving waiting fork workflows and opening a revert pull request for a merged change.
 
