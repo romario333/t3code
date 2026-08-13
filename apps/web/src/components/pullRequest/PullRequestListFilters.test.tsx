@@ -42,6 +42,41 @@ function findLabeledGroup(node: ReactNode, label: string): ReactNode {
   return undefined;
 }
 
+type CheckboxItem = ReactElement<{
+  readonly checked: boolean;
+  readonly onCheckedChange: (checked: boolean) => void;
+}>;
+
+/** Every repository row in the tree, in the order the menu draws them. */
+function findCheckboxItems(node: ReactNode): ReadonlyArray<CheckboxItem> {
+  const found: CheckboxItem[] = [];
+  for (const child of Children.toArray(node)) {
+    if (!isValidElement(child)) continue;
+    const props = child.props as {
+      readonly children?: ReactNode;
+      readonly onCheckedChange?: (checked: boolean) => void;
+    };
+    if (props.onCheckedChange) found.push(child as CheckboxItem);
+    else found.push(...findCheckboxItems(props.children));
+  }
+  return found;
+}
+
+const repositoryChoices = [
+  {
+    key: "a",
+    label: "acme/app",
+    environmentId: "env-1" as EnvironmentId,
+    workspaceRoot: "/work/app",
+  },
+  {
+    key: "b",
+    label: "acme/site",
+    environmentId: "env-1" as EnvironmentId,
+    workspaceRoot: "/work/site",
+  },
+];
+
 function menu(overrides: Partial<Parameters<typeof PullRequestFiltersMenu>[0]>) {
   return PullRequestFiltersMenu({
     state: "open",
@@ -66,6 +101,9 @@ function menu(overrides: Partial<Parameters<typeof PullRequestFiltersMenu>[0]>) 
     projectEnvironmentId: undefined,
     unavailable: new Map(),
     onProject: () => undefined,
+    repositories: [],
+    hiddenRepositories: new Set<string>(),
+    onRepositoryHidden: () => undefined,
     ...overrides,
   });
 }
@@ -177,5 +215,29 @@ describe("pull request filters menu", () => {
         id: "b c" as ProjectId,
       }),
     );
+  });
+
+  it("reads a repository ticked off as hidden, and one ticked back as shown", () => {
+    const onRepositoryHidden = vi.fn();
+    const items = findCheckboxItems(
+      menu({
+        repositories: repositoryChoices,
+        hiddenRepositories: new Set(["a"]),
+        onRepositoryHidden,
+      }),
+    );
+    expect(items).toHaveLength(2);
+    // Hidden is the unticked one, since the tick says the list reads this repository.
+    expect(items.map((item) => item.props.checked)).toEqual([false, true]);
+
+    items[1]?.props.onCheckedChange(false);
+    expect(onRepositoryHidden).toHaveBeenCalledWith("b", true);
+
+    items[0]?.props.onCheckedChange(true);
+    expect(onRepositoryHidden).toHaveBeenCalledWith("a", false);
+  });
+
+  it("leaves the group out where there is only one repository to hide", () => {
+    expect(findCheckboxItems(menu({ repositories: [repositoryChoices[0]!] }))).toEqual([]);
   });
 });
