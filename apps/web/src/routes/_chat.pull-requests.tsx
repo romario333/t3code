@@ -29,6 +29,12 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
+  environmentProjectKey,
+  hiddenPullRequestProjectKeys,
+  pullRequestRepositoryChoices,
+  visiblePullRequestProjects,
+} from "../components/pullRequest/pullRequestHiddenRepositories.logic";
+import {
   filterPullRequestsByInvolvement,
   findScopedProject,
   groupPullRequestsByInvolvement,
@@ -83,6 +89,10 @@ import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "../
 import { SidebarInset } from "../components/ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../components/ui/tooltip";
 import { useLiveRefresh } from "../hooks/useLiveRefresh";
+import {
+  selectHiddenRepositoryKeys,
+  usePullRequestVisibilityStore,
+} from "../pullRequestVisibilityStore";
 import {
   selectActiveRightPanelSurface,
   selectSelectedRightPanelSurface,
@@ -276,6 +286,16 @@ function PullRequestsRouteView() {
   const projects = useMemo(
     () => allProjects.filter((project) => environmentIds.includes(project.environmentId)),
     [allProjects, environmentIds],
+  );
+  // Repositories the reader has taken off this page for good. Kept rather than put in the URL:
+  // it is an answer about the workspace, not a narrowing of one listing, and a link that carried
+  // it would impose it on whoever opened the link.
+  const hiddenRepositoryKeys = usePullRequestVisibilityStore(selectHiddenRepositoryKeys);
+  const hiddenRepositories = useMemo(() => new Set(hiddenRepositoryKeys), [hiddenRepositoryKeys]);
+  const repositoryChoices = useMemo(() => pullRequestRepositoryChoices(projects), [projects]);
+  const hiddenProjectKeys = useMemo(
+    () => hiddenPullRequestProjectKeys(projects, hiddenRepositories),
+    [hiddenRepositories, projects],
   );
   const environmentLabels = useMemo(
     () =>
@@ -511,8 +531,13 @@ function PullRequestsRouteView() {
    * where the page's actions land — and the others are asked only for what is theirs alone. A
    * server left with nothing of its own is not read at all.
    *
+   * A repository the reader has hidden is left out of the assignment, so no host is ever asked
+   * about it — the totals below still count it, which is what keeps the allowlist on rather than
+   * dropping it as "everything this server holds".
+   *
    * Left alone while the projects are still arriving, and while the scope is a single project:
-   * that path deliberately asks both servers holding an ambiguous id.
+   * that path deliberately asks both servers holding an ambiguous id, and a scope the reader
+   * named outright is a stronger word than a repository they hid earlier.
    */
   const environmentQueries = useMemo((): ReadonlyArray<{
     readonly environmentId: EnvironmentId;
@@ -521,7 +546,7 @@ function PullRequestsRouteView() {
     const plain = queryEnvironmentIds.map((environmentId) => ({ environmentId }));
     if (!projectsKnown || scopedProjectId !== undefined) return plain;
     const assignment = assignProjectsToEnvironments(
-      projects,
+      visiblePullRequestProjects(projects, hiddenRepositories),
       queryEnvironmentIds,
       queryEnvironmentIds[0],
     );
@@ -537,7 +562,7 @@ function PullRequestsRouteView() {
       if (projectIds.length === (totals.get(environmentId) ?? 0)) return [{ environmentId }];
       return [{ environmentId, projectIds }];
     });
-  }, [projects, projectsKnown, queryEnvironmentIds, scopedProjectId]);
+  }, [hiddenRepositories, projects, projectsKnown, queryEnvironmentIds, scopedProjectId]);
   // Part of the scope, since a different split is a different question and its answers must not
   // be filed under the same page state.
   const assignmentKey = useMemo(
@@ -996,7 +1021,14 @@ function PullRequestsRouteView() {
 
   const entries = useMemo(() => {
     const known = ordered?.key === filterKey ? ordered.entries : (listData?.entries ?? []);
-    const involvementEntries = filterPullRequestsByInvolvement(known, viewers, search.involvement);
+    // Nothing new arrives from a hidden repository, so this only catches the rows that were read
+    // before it was hidden: hiding one takes its rows off the page at once rather than at the
+    // next answer.
+    const shown =
+      hiddenProjectKeys.size === 0
+        ? known
+        : known.filter((entry) => !hiddenProjectKeys.has(environmentProjectKey(entry)));
+    const involvementEntries = filterPullRequestsByInvolvement(shown, viewers, search.involvement);
     // The hosts search more than the row shows — a body, a review, a commit message — so once
     // their answer is in, narrowing it again here would throw away matches the reader asked for.
     // The local pass stands in for the answer that has not arrived yet, and for the hosts that
@@ -1027,6 +1059,7 @@ function PullRequestsRouteView() {
   }, [
     filterKey,
     hasLocalFilters,
+    hiddenProjectKeys,
     localFilters,
     listData,
     ordered,
@@ -1350,7 +1383,8 @@ function PullRequestsRouteView() {
             search.state !== "open" ||
             search.involvement !== "all" ||
             scopedProjectId !== undefined ||
-            search.host !== undefined
+            search.host !== undefined ||
+            hiddenRepositories.size > 0
           }
           searching={typedQuery.length > 0 && (!querySettled || showingCarried)}
           canLoadMore={listData?.truncated === true && (canContinue || pageSize < MAX_PAGE_SIZE)}
@@ -1478,6 +1512,11 @@ function PullRequestsRouteView() {
       // server scope as it was rather than clearing it.
       onProject={(projectId, environmentId) =>
         updateListScope(environmentId === undefined ? { projectId } : { projectId, environmentId })
+      }
+      repositories={repositoryChoices}
+      hiddenRepositories={hiddenRepositories}
+      onRepositoryHidden={(repositoryKey, hidden) =>
+        usePullRequestVisibilityStore.getState().setRepositoryHidden(repositoryKey, hidden)
       }
     />
   );

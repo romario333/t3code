@@ -43,6 +43,9 @@ T3 Code works with the platforms your team already uses:
   leaving the conversation
 - Open the review directly in your browser with one click
 - Command-click (Control-click on Windows and Linux) a pull request number in the sidebar to open it in your browser instead of in T3 Code
+- Take a repository off the **Pull requests** page for good from the filter menu's **Repositories**
+  list. A hidden repository is never asked about, so its reviews cost you no waiting — untick it
+  once and every worktree and copy of it stays hidden until you tick it back
 - Check out a teammate's branch to review code locally
 
 **Fix what you wrote, in place**
