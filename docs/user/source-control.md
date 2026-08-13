@@ -133,6 +133,10 @@ On web and desktop, hold **Shift** in the GitHub pull request list for quick act
 To close several, press **Close**, drag across the rows in the same group, and release.
 Press **Escape** before releasing to cancel. Failed closes stay in the list so you can retry them.
 
+To keep a repository off the **Pull requests** page, untick it under **Repositories** in the filter
+menu. A hidden repository is never queried, and the choice covers every worktree and copy of it
+until you tick it back.
+
 GitHub, GitLab, and Azure DevOps support auto-merge while checks are outstanding. GitHub also
 supports approving waiting fork workflows and opening a revert pull request for a merged change.
 
