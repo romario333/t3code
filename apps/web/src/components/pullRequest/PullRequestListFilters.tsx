@@ -28,6 +28,8 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group"
 
 import {
   Menu,
+  MenuCheckboxItem,
+  MenuGroup,
   MenuGroupLabel,
   MenuPopup,
   MenuRadioGroup,
@@ -36,6 +38,7 @@ import {
   MenuTrigger,
 } from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import type { PullRequestRepositoryChoice } from "./pullRequestHiddenRepositories.logic";
 
 export interface PullRequestFilterOption<Value extends string> {
   readonly value: Value;
@@ -207,6 +210,9 @@ export function PullRequestFiltersMenu({
   projectEnvironmentId,
   unavailable,
   onProject,
+  repositories,
+  hiddenRepositories,
+  onRepositoryHidden,
 }: {
   state: PullRequestListState;
   stateOptions: ReadonlyArray<PullRequestFilterOption<PullRequestListState>>;
@@ -252,6 +258,14 @@ export function PullRequestFiltersMenu({
   unavailable: ReadonlyMap<string, string>;
   /** The environment comes with the project id, since picking a row picks a specific server's copy of it. */
   onProject: (projectId: ProjectId | undefined, environmentId: EnvironmentId | undefined) => void;
+  /**
+   * The repositories behind those projects, one entry each. Unlike the scope above this is not a
+   * narrowing of one listing but a standing answer about which repositories the page reads at
+   * all, so it is kept rather than carried in the URL.
+   */
+  repositories: ReadonlyArray<PullRequestRepositoryChoice>;
+  hiddenRepositories: ReadonlySet<string>;
+  onRepositoryHidden: (repositoryKey: string, hidden: boolean) => void;
 }) {
   const filtered =
     state !== "open" ||
@@ -259,6 +273,7 @@ export function PullRequestFiltersMenu({
     host !== undefined ||
     server !== undefined ||
     projectId !== undefined ||
+    hiddenRepositories.size > 0 ||
     Object.keys(filters).length > 0;
   /**
    * Rebuilt rather than spread so an unfiltered group leaves the record instead of lingering in
@@ -421,6 +436,33 @@ export function PullRequestFiltersMenu({
               );
             })}
         </MenuRadioGroup>
+        {/* Only where there is more than one: hiding the workspace's only repository leaves a
+            page that can never show anything, which is not a choice worth offering. */}
+        {repositories.length > 1 ? (
+          <>
+            <MenuSeparator />
+            <MenuGroup>
+              <MenuGroupLabel>Repositories</MenuGroupLabel>
+              {repositories.map((repository) => (
+                <MenuCheckboxItem
+                  key={repository.key}
+                  checked={!hiddenRepositories.has(repository.key)}
+                  onCheckedChange={(checked) => onRepositoryHidden(repository.key, !checked)}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <ProjectFavicon
+                      environmentId={repository.environmentId}
+                      cwd={repository.workspaceRoot}
+                      fallbackIcon={FolderGit2Icon}
+                      className="size-3.5 shrink-0"
+                    />
+                    <span className="min-w-0 flex-1 truncate">{repository.label}</span>
+                  </span>
+                </MenuCheckboxItem>
+              ))}
+            </MenuGroup>
+          </>
+        ) : null}
       </MenuPopup>
     </Menu>
   );

@@ -14,7 +14,7 @@ export interface AssignableProject {
  * `normalizeGitRemoteUrl` already lower-cases the whole remote, so the key arrives cased one way
  * whatever the remote said; the fold here only guards a key assembled some other way.
  */
-function repositoryKey(project: AssignableProject): string | undefined {
+export function repositoryKey(project: AssignableProject): string | undefined {
   return project.repositoryIdentity?.canonicalKey?.toLowerCase();
 }
 
