@@ -103,3 +103,12 @@ Release). Watch pingdotgg/t3code with **Watch → Custom → Releases**, or poll
 `releases.atom` feed. The self-built app also shows an in-app pill when a newer
 stable is out. Auto-update in self-built apps is inert by design — every new
 version means: port, rebuild, reinstall.
+
+## Cleaning up worktrees
+
+T3 Code never removes worktrees on its own: archiving leaves them in place, and
+auto-settle parks finished threads without archiving them. `prune-worktrees.sh` at
+the repo root collects them. It reads the live database read-only, so it is safe
+to run while the app is up. It removes only clean, branch-bearing, unused worktrees
+whose thread is settled, archived, or deleted. Dry run by default; `--yes` applies.
+Branches are never deleted. When asked to clean up worktrees, use this script.
