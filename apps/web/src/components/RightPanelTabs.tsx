@@ -25,6 +25,7 @@ import {
   GitPullRequestArrow,
   Globe2,
   Plus,
+  StickyNote,
   TerminalSquare,
   Volume2,
   VolumeOff,
@@ -118,6 +119,7 @@ interface RightPanelTabsProps {
   onAddPullRequests: () => void;
   onAddAgents: () => void;
   onAddDevice: () => void;
+  onAddNotes: () => void;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -127,6 +129,7 @@ interface RightPanelTabsProps {
   agentsAvailable: boolean;
   deviceAvailable: boolean;
   pullRequestStatusSeeds?: Readonly<Record<string, PullRequestTabStatusSeed>>;
+  notesAvailable: boolean;
   /** Running + waiting subagents; badges the Agents card in the empty state. */
   liveAgentCount: number;
   children: ReactNode;
@@ -157,6 +160,7 @@ const SURFACE_DISABLED_REASONS = {
   pullRequests: "No linked pull requests are available for this thread.",
   agents: "Agents are only available from a thread.",
   device: "Devices are only available from a thread.",
+  notes: "Notes are only available from a thread.",
 } as const;
 
 /** Overlays that must win over the launcher's letter shortcuts. */
@@ -181,6 +185,7 @@ const SURFACE_UNAVAILABLE_HINTS = {
   pullRequests: "No linked pull requests available.",
   agents: "Available from a thread.",
   device: "Available from a thread.",
+  notes: "Available from a thread.",
 } as const;
 
 type TabContextMenuAction =
@@ -321,6 +326,7 @@ function RightPanelEmptyState(props: {
   onAddPullRequests: () => void;
   onAddAgents: () => void;
   onAddDevice: () => void;
+  onAddNotes: () => void;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -329,6 +335,7 @@ function RightPanelEmptyState(props: {
   pullRequestsAvailable: boolean;
   agentsAvailable: boolean;
   deviceAvailable: boolean;
+  notesAvailable: boolean;
   liveAgentCount: number;
 }) {
   // -1 means no highlight: it only appears on hover or arrow use.
@@ -406,6 +413,16 @@ function RightPanelEmptyState(props: {
       available: props.deviceAvailable,
       disabledReason: SURFACE_UNAVAILABLE_HINTS.device,
       onClick: props.onAddDevice,
+      badgeCount: 0,
+    },
+    {
+      label: "Notes",
+      description: "Your private note for this thread.",
+      icon: StickyNote,
+      shortcut: "N",
+      available: props.notesAvailable,
+      disabledReason: SURFACE_UNAVAILABLE_HINTS.notes,
+      onClick: props.onAddNotes,
       badgeCount: 0,
     },
   ] as const;
@@ -632,6 +649,8 @@ function surfaceTitle(
       return "Agents";
     case "device":
       return surface.title ?? surface.target?.name ?? "Device";
+    case "notes":
+      return "Notes";
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
@@ -723,6 +742,10 @@ function SurfaceIcon({
       ) : (
         <Smartphone className="size-3 shrink-0" />
       );
+    case "notes":
+      // Amber like the sidebar's note indicator, so the tab reads as the
+      // same object.
+      return <StickyNote className="size-3 shrink-0 text-amber-500 dark:text-amber-300/90" />;
   }
 }
 
@@ -924,6 +947,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       available: props.deviceAvailable,
       disabledReason: SURFACE_DISABLED_REASONS.device,
       onClick: props.onAddDevice,
+    },
+    {
+      label: "Notes",
+      icon: StickyNote,
+      shortcut: "N",
+      available: props.notesAvailable,
+      disabledReason: SURFACE_DISABLED_REASONS.notes,
+      onClick: props.onAddNotes,
     },
   ] as const;
 
@@ -1397,6 +1428,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddPullRequests={props.onAddPullRequests}
             onAddAgents={props.onAddAgents}
             onAddDevice={props.onAddDevice}
+            onAddNotes={props.onAddNotes}
             browserAvailable={props.browserAvailable}
             terminalAvailable={props.terminalAvailable}
             diffAvailable={props.diffAvailable}
@@ -1405,6 +1437,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             pullRequestsAvailable={props.pullRequestsAvailable}
             agentsAvailable={props.agentsAvailable}
             deviceAvailable={props.deviceAvailable}
+            notesAvailable={props.notesAvailable}
             liveAgentCount={props.liveAgentCount}
           />
         ) : (
