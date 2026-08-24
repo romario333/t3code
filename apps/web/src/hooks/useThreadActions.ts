@@ -42,6 +42,7 @@ import {
 } from "../state/entities";
 import { useUiStateStore } from "../uiStateStore";
 import { useTerminalUiStateStore } from "../terminalUiStateStore";
+import { useThreadNotesStore } from "../threadNotesStore";
 import { buildThreadRouteParams, resolveThreadRouteRef } from "../threadRoutes";
 import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../worktreeCleanup";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
@@ -298,6 +299,7 @@ export function useThreadActions() {
   );
   const clearTerminalUiState = useTerminalUiStateStore((state) => state.clearTerminalUiState);
   const markThreadVisited = useUiStateStore((state) => state.markThreadVisited);
+  const removeThreadNote = useThreadNotesStore((state) => state.removeThread);
   const router = useRouter();
   const handleNewThread = useNewThreadHandler();
   // Keep a ref so archiveThread can call handleNewThread without appearing in
@@ -524,6 +526,7 @@ export function useThreadActions() {
         threadRef,
       );
       clearTerminalUiState(threadRef);
+      removeThreadNote(threadRef);
 
       if (shouldNavigateToFallback) {
         const fallbackThread = fallbackThreadId
@@ -601,6 +604,7 @@ export function useThreadActions() {
       deleteThreadMutation,
       getCurrentRouteThreadRef,
       refreshVcsStatus,
+      removeThreadNote,
       removeWorktree,
       router,
       resolveThreadTarget,

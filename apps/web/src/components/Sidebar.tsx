@@ -77,6 +77,7 @@ import {
   SettingsIcon,
   ShieldQuestionIcon,
   SquarePenIcon,
+  StickyNoteIcon,
   TerminalIcon,
   Undo2Icon,
   XIcon,
@@ -127,6 +128,7 @@ import {
   projectGroupsSpanEnvironments,
   type SidebarProjectSnapshot,
 } from "../sidebarProjectGrouping";
+import { noteSummaryLine, useThreadNotesStore } from "../threadNotesStore";
 import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
 import {
   getThreadKeysToDeselectAfterDelete,
@@ -412,6 +414,7 @@ function SidebarThreadTooltip({
   branchMismatch,
   terminalStatus,
   terminalProcessCount,
+  noteSummary,
 }: {
   thread: SidebarThreadSummary;
   project: ProjectFaviconProject | null;
@@ -429,6 +432,7 @@ function SidebarThreadTooltip({
   } | null;
   terminalStatus: TerminalStatusIndicator | null;
   terminalProcessCount: number;
+  noteSummary: string | null;
 }) {
   const driverKind = providerEntry?.driverKind ?? null;
   const previousProviderNames = thread.providerInstanceHistory
@@ -516,6 +520,12 @@ function SidebarThreadTooltip({
             <div className="min-w-0 truncate text-foreground/75">
               {terminalProcessLabel(terminalProcessCount)}
             </div>
+          </div>
+        ) : null}
+        {noteSummary ? (
+          <div className="flex min-w-0 items-center gap-2">
+            <StickyNoteIcon aria-hidden className="size-3 shrink-0 text-warning" />
+            <div className="min-w-0 truncate text-foreground/75">{noteSummary}</div>
           </div>
         ) : null}
         {thread.runtime?.lastError ? (
@@ -1340,6 +1350,13 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   // different machines apart.
   const isRemote = thread.environmentId !== props.currentEnvironmentId;
 
+  // Subscribed per thread key inside the memoized row, reduced to the note's
+  // first line: typing further down the note re-renders nothing here, and
+  // rows without a note never re-render at all.
+  const noteSummary = useThreadNotesStore((state) =>
+    noteSummaryLine(state.notesByThreadKey[threadKey]),
+  );
+
   const detailsTooltip = (
     <SidebarThreadTooltip
       thread={thread}
@@ -1355,6 +1372,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
       branchMismatch={branchMismatch}
       terminalStatus={terminalStatus}
       terminalProcessCount={terminalProcessCount}
+      noteSummary={noteSummary}
     />
   );
 
@@ -1509,6 +1527,15 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   useEffect(() => {
     if (!showSnoozeButton) setSnoozeMenuOpen(false);
   }, [showSnoozeButton]);
+  const handleNoteIndicatorClick = useCallback(
+    (event: ReactMouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      useRightPanelStore.getState().open(threadRef, "notes");
+      if (!props.isActive) onThreadActivate(threadRef);
+    },
+    [onThreadActivate, props.isActive, threadRef],
+  );
   const handlePrClick = useCallback(
     (event: ReactMouseEvent<HTMLElement>, targetUrl?: string) => {
       const url = targetUrl ?? pr?.url ?? currentLinkedPr?.url;
@@ -1705,6 +1732,24 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
       <TooltipPopup side="top">Unsent draft</TooltipPopup>
     </Tooltip>
   ) : null;
+
+  // Always visible when a note exists, absent otherwise — seeing at a glance
+  // which threads carry a note is the indicator's whole job. Clicking it
+  // opens the note in the right panel, activating the thread first.
+  const noteIndicator =
+    noteSummary !== null ? (
+      <button
+        type="button"
+        aria-label="Open thread note"
+        data-testid={`sidebar-note-indicator-${thread.id}`}
+        onClick={handleNoteIndicatorClick}
+        // Double-click on the row starts a rename; the icon must not.
+        onDoubleClick={(event) => event.stopPropagation()}
+        className="inline-flex shrink-0 cursor-pointer items-center justify-center text-warning outline-none transition-colors hover:text-warning-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <StickyNoteIcon className="size-3.5" />
+      </button>
+    ) : null;
   const showPin =
     props.isPinned && (!sortable?.isDragging || (props.dragOverPinned && props.dropVerb === null));
   const pinIndicator = showPin ? (
@@ -1794,6 +1839,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                 Regenerating title
               </span>
             ) : null}
+            {noteIndicator}
             {/* The PR badge stays outside the hover-fading slot: it must
               remain visible AND clickable while the row is hovered. Only
               the time/jump label yields to the settle affordance. */}
@@ -2131,6 +2177,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                 <span className="flex-1" />
               )}
               {terminalStatusIcon}
+              {noteIndicator}
               {prBadge}
               {diff ? (
                 <span className="shrink-0 font-mono">
@@ -2260,6 +2307,11 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
     window.addEventListener("dragend", clearFileDrag);
     return () => window.removeEventListener("dragend", clearFileDrag);
   }, [isFileDragOver]);
+  const noteSummary = useThreadNotesStore((state) =>
+    noteSummaryLine(
+      state.notesByThreadKey[scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))],
+    ),
+  );
   return (
     <li role="presentation" className="list-none" {...fileDropHandlers}>
       <Tooltip>
@@ -2324,6 +2376,7 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
           branchMismatch={branchMismatch}
           terminalStatus={terminalStatus}
           terminalProcessCount={runningTerminalIds.length}
+          noteSummary={noteSummary}
         />
       </Tooltip>
     </li>
