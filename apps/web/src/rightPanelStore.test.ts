@@ -252,6 +252,16 @@ describe("rightPanelStore", () => {
     });
   });
 
+  it("keeps notes as a singleton surface", () => {
+    useRightPanelStore.getState().open(refA, "notes");
+    useRightPanelStore.getState().open(refA, "notes");
+    expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
+      isOpen: true,
+      activeSurfaceId: "notes",
+      surfaces: [{ id: "notes", kind: "notes" }],
+    });
+  });
+
   it("replaces the standalone explorer with peer file surfaces", () => {
     useRightPanelStore.getState().open(refA, "files");
     useRightPanelStore.getState().openFile(refA, "src/index.ts");

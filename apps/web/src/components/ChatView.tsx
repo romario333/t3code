@@ -166,6 +166,8 @@ import { PullRequestDetailGhost } from "./pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "./pullRequest/PullRequestsUnavailableState";
 import { RightPanelTabs, type PullRequestTabStatus } from "./RightPanelTabs";
 import { AgentsPanel } from "./AgentsPanel";
+import { NotesPanel } from "./NotesPanel";
+import { noteSummaryLine, useThreadNotesStore } from "../threadNotesStore";
 import {
   deriveAgentPanelModel,
   foldSubagentActivities,
@@ -1678,6 +1680,21 @@ function ChatViewContent(props: ChatViewProps) {
   const activeRightPanelSurface = useRightPanelStore((state) =>
     selectActiveRightPanelSurface(state.byThreadKey, activeThreadRef),
   );
+  // Selecting a thread that carries a note surfaces it automatically — but
+  // only when the panel holds nothing besides the note, so a terminal, diff,
+  // or any other surface the user had open (or deliberately hid) is never
+  // displaced. A hidden notes-only panel counts as free: hiding it parks the
+  // note for now, and the next visit brings it back. Runs on selection only,
+  // so hiding or closing it sticks while the thread stays active.
+  useEffect(() => {
+    if (!activeThreadRef) return;
+    const { byThreadKey, open } = useRightPanelStore.getState();
+    const { surfaces } = selectThreadRightPanelState(byThreadKey, activeThreadRef);
+    if (surfaces.some((surface) => surface.kind !== "notes")) return;
+    const note = useThreadNotesStore.getState().notesByThreadKey[scopedThreadKey(activeThreadRef)];
+    if (noteSummaryLine(note) === null) return;
+    open(activeThreadRef, "notes");
+  }, [activeThreadRef]);
   const [pullRequestTabStatuses, setPullRequestTabStatuses] = useState<
     Record<string, PullRequestTabStatus>
   >({});
@@ -3390,6 +3407,10 @@ function ChatViewContent(props: ChatViewProps) {
   const addAgentsSurface = useCallback(() => {
     if (!activeThreadRef) return;
     useRightPanelStore.getState().open(activeThreadRef, "agents");
+  }, [activeThreadRef]);
+  const addNotesSurface = useCallback(() => {
+    if (!activeThreadRef) return;
+    useRightPanelStore.getState().open(activeThreadRef, "notes");
   }, [activeThreadRef]);
   const openFileSurface = useCallback(
     (relativePath: string) => {
@@ -6535,6 +6556,8 @@ function ChatViewContent(props: ChatViewProps) {
         environmentId={activeThreadRef?.environmentId ?? null}
         threadId={activeThreadRef?.threadId ?? null}
       />
+    ) : activeRightPanelSurface?.kind === "notes" ? (
+      <NotesPanel threadRef={activeThreadRef} />
     ) : (activeRightPanelSurface?.kind === "files" || activeRightPanelSurface?.kind === "file") &&
       activeProject &&
       activeWorkspaceRoot ? (
@@ -7004,12 +7027,14 @@ function ChatViewContent(props: ChatViewProps) {
           onAddFiles={addFilesSurface}
           onAddPullRequest={addPullRequestSurface}
           onAddAgents={addAgentsSurface}
+          onAddNotes={addNotesSurface}
           browserAvailable={isPreviewSupportedInRuntime()}
           terminalAvailable={activeProject !== null}
           diffAvailable={isServerThread && isGitRepo}
           filesAvailable={activeProject !== null}
           pullRequestAvailable={pullRequestSurfaceAvailable}
           agentsAvailable
+          notesAvailable
           pullRequestStatuses={pullRequestTabStatuses}
           liveAgentCount={agentPanelModel.liveCount}
         >
@@ -7044,12 +7069,14 @@ function ChatViewContent(props: ChatViewProps) {
             onAddFiles={addFilesSurface}
             onAddPullRequest={addPullRequestSurface}
             onAddAgents={addAgentsSurface}
+            onAddNotes={addNotesSurface}
             browserAvailable={isPreviewSupportedInRuntime()}
             terminalAvailable={activeProject !== null}
             diffAvailable={isServerThread && isGitRepo}
             filesAvailable={activeProject !== null}
             pullRequestAvailable={pullRequestSurfaceAvailable}
             agentsAvailable
+            notesAvailable
             pullRequestStatuses={pullRequestTabStatuses}
             liveAgentCount={agentPanelModel.liveCount}
           >
