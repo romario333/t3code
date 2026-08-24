@@ -272,6 +272,8 @@ import { useDeviceState } from "~/state/device";
 import { DeviceSetup } from "./device/DeviceSetup";
 import { Dialog } from "./ui/dialog";
 import { WizardPopup } from "./ui/wizard";
+import { NotesPanel } from "./NotesPanel";
+import { noteSummaryLine, useThreadNotesStore } from "../threadNotesStore";
 import { BranchToolbar, type BranchToolbarHandle } from "./BranchToolbar";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import { makeWorkspaceFileDropHandlers } from "./chat/workspaceFileDrop";
@@ -2228,6 +2230,21 @@ export default function ChatView(props: ChatViewProps) {
   const activeRightPanelSurface = useRightPanelStore((state) =>
     selectActiveRightPanelSurface(state.byThreadKey, activeThreadRef),
   );
+  // Selecting a thread that carries a note surfaces it automatically — but
+  // only when the panel holds nothing besides the note, so a terminal, diff,
+  // or any other surface the user had open (or deliberately hid) is never
+  // displaced. A hidden notes-only panel counts as free: hiding it parks the
+  // note for now, and the next visit brings it back. Runs on selection only,
+  // so hiding or closing it sticks while the thread stays active.
+  useEffect(() => {
+    if (!activeThreadRef) return;
+    const { byThreadKey, open } = useRightPanelStore.getState();
+    const { surfaces } = selectThreadRightPanelState(byThreadKey, activeThreadRef);
+    if (surfaces.some((surface) => surface.kind !== "notes")) return;
+    const note = useThreadNotesStore.getState().notesByThreadKey[scopedThreadKey(activeThreadRef)];
+    if (noteSummaryLine(note) === null) return;
+    open(activeThreadRef, "notes");
+  }, [activeThreadRef]);
   const activePreviewState = useThreadPreviewState(activeThreadRef);
   const activePreviewMiniPlayer = usePreviewMiniPlayerStore((state) =>
     selectThreadPreviewMiniPlayer(state.byThreadKey, activeThreadRef),
@@ -5104,6 +5121,10 @@ export default function ChatView(props: ChatViewProps) {
     );
     if (!sessionStillExists) usePreviewMiniPlayerStore.getState().close(activeThreadRef);
   }, [activePreviewMiniPlayer, activeThreadRef, deviceState.sessions, deviceStateLoaded]);
+  const addNotesSurface = useCallback(() => {
+    if (!activeThreadRef) return;
+    useRightPanelStore.getState().open(activeThreadRef, "notes");
+  }, [activeThreadRef]);
   const openFileSurface = useCallback(
     (relativePath: string) => {
       if (!activeThreadRef || !activeProject) return;
@@ -10317,6 +10338,8 @@ export default function ChatView(props: ChatViewProps) {
           }}
         />
       </Suspense>
+    ) : renderedRightPanelSurface?.kind === "notes" ? (
+      <NotesPanel threadRef={activeThreadRef} />
     ) : (renderedRightPanelSurface?.kind === "files" ||
         renderedRightPanelSurface?.kind === "file") &&
       ((activeProject && activeWorkspaceRoot) ||
@@ -11166,6 +11189,7 @@ export default function ChatView(props: ChatViewProps) {
           onAddPullRequest={addPullRequestSurface}
           onAddPullRequests={addPullRequestsSurface}
           onAddDevice={addDeviceSurface}
+          onAddNotes={addNotesSurface}
           browserAvailable={isPreviewSupportedInRuntime()}
           terminalAvailable={activeProject !== null}
           diffAvailable={isServerThread && isGitRepo}
@@ -11173,6 +11197,7 @@ export default function ChatView(props: ChatViewProps) {
           pullRequestAvailable={pullRequestSurfaceAvailable}
           pullRequestsAvailable={pullRequestsSurfaceAvailable}
           deviceAvailable={activeThreadRef !== null}
+          notesAvailable
         >
           {rightPanelContent}
         </RightPanelTabs>
@@ -11220,6 +11245,7 @@ export default function ChatView(props: ChatViewProps) {
             onAddPullRequest={addPullRequestSurface}
             onAddPullRequests={addPullRequestsSurface}
             onAddDevice={addDeviceSurface}
+            onAddNotes={addNotesSurface}
             browserAvailable={isPreviewSupportedInRuntime()}
             terminalAvailable={activeProject !== null}
             diffAvailable={isServerThread && isGitRepo}
@@ -11227,6 +11253,7 @@ export default function ChatView(props: ChatViewProps) {
             pullRequestAvailable={pullRequestSurfaceAvailable}
             pullRequestsAvailable={pullRequestsSurfaceAvailable}
             deviceAvailable={activeThreadRef !== null}
+            notesAvailable
           >
             {rightPanelContent}
           </RightPanelTabs>
