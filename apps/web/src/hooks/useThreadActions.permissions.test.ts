@@ -134,6 +134,7 @@ vi.mock("../uiStateStore", () => ({
       markThreadVisited: () => state.localEffects.push("mark-visited"),
     }),
 }));
+vi.mock("../threadNotesStore", () => ({ useThreadNotesStore: () => vi.fn() }));
 vi.mock("../lib/archivedThreadsState", () => ({
   refreshArchivedThreadsForEnvironment: () => state.localEffects.push("refresh-archive"),
 }));
