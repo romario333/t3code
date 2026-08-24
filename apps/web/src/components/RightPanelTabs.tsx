@@ -16,6 +16,7 @@ import {
   GitPullRequest,
   Globe2,
   Plus,
+  StickyNote,
   TerminalSquare,
   Volume2,
   VolumeOff,
@@ -105,6 +106,7 @@ interface RightPanelTabsProps {
   onAddFiles: () => void;
   onAddPullRequest: () => void;
   onAddAgents: () => void;
+  onAddNotes: () => void;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -112,6 +114,7 @@ interface RightPanelTabsProps {
   pullRequestAvailable: boolean;
   agentsAvailable: boolean;
   pullRequestStatusSeeds?: Readonly<Record<string, PullRequestTabStatusSeed>>;
+  notesAvailable: boolean;
   /** Running + waiting subagents; badges the Agents card in the empty state. */
   liveAgentCount: number;
   children: ReactNode;
@@ -140,6 +143,7 @@ const SURFACE_DISABLED_REASONS = {
   diff: "Diff is only available for server threads in Git repositories.",
   pullRequest: "This thread's branch has no pull request yet.",
   agents: "Agents are only available from a thread.",
+  notes: "Notes are only available from a thread.",
 } as const;
 
 /** Overlays that must win over the launcher's letter shortcuts. */
@@ -162,6 +166,7 @@ const SURFACE_UNAVAILABLE_HINTS = {
   diff: "Available for Git repositories.",
   pullRequest: "No pull request on this branch yet.",
   agents: "Available from a thread.",
+  notes: "Available from a thread.",
 } as const;
 
 type TabContextMenuAction =
@@ -299,12 +304,14 @@ function RightPanelEmptyState(props: {
   onAddFiles: () => void;
   onAddPullRequest: () => void;
   onAddAgents: () => void;
+  onAddNotes: () => void;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
   filesAvailable: boolean;
   pullRequestAvailable: boolean;
   agentsAvailable: boolean;
+  notesAvailable: boolean;
   liveAgentCount: number;
 }) {
   // -1 means no highlight: it only appears on hover or arrow use.
@@ -370,6 +377,16 @@ function RightPanelEmptyState(props: {
       disabledReason: SURFACE_UNAVAILABLE_HINTS.agents,
       onClick: props.onAddAgents,
       badgeCount: props.liveAgentCount,
+    },
+    {
+      label: "Notes",
+      description: "Your private note for this thread.",
+      icon: StickyNote,
+      shortcut: "N",
+      available: props.notesAvailable,
+      disabledReason: SURFACE_UNAVAILABLE_HINTS.notes,
+      onClick: props.onAddNotes,
+      badgeCount: 0,
     },
   ] as const;
 
@@ -604,6 +621,8 @@ function surfaceTitle(
       return `#${surface.number}`;
     case "agents":
       return "Agents";
+    case "notes":
+      return "Notes";
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
@@ -685,6 +704,10 @@ function SurfaceIcon({
       );
     case "agents":
       return <Bot className="size-3 shrink-0" />;
+    case "notes":
+      // Amber like the sidebar's note indicator, so the tab reads as the
+      // same object.
+      return <StickyNote className="size-3 shrink-0 text-amber-500 dark:text-amber-300/90" />;
   }
 }
 
@@ -813,6 +836,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       available: props.agentsAvailable,
       disabledReason: SURFACE_DISABLED_REASONS.agents,
       onClick: props.onAddAgents,
+    },
+    {
+      label: "Notes",
+      icon: StickyNote,
+      shortcut: "N",
+      available: props.notesAvailable,
+      disabledReason: SURFACE_DISABLED_REASONS.notes,
+      onClick: props.onAddNotes,
     },
   ] as const;
 
@@ -1251,12 +1282,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddFiles={props.onAddFiles}
             onAddPullRequest={props.onAddPullRequest}
             onAddAgents={props.onAddAgents}
+            onAddNotes={props.onAddNotes}
             browserAvailable={props.browserAvailable}
             terminalAvailable={props.terminalAvailable}
             diffAvailable={props.diffAvailable}
             filesAvailable={props.filesAvailable}
             pullRequestAvailable={props.pullRequestAvailable}
             agentsAvailable={props.agentsAvailable}
+            notesAvailable={props.notesAvailable}
             liveAgentCount={props.liveAgentCount}
           />
         ) : (
