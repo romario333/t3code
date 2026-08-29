@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { type PendingApproval } from "../../session-logic";
+import { approvalKindLabel } from "./composerPendingApprovalLabels";
 import { cn } from "~/lib/utils";
 
 interface ComposerPendingApprovalPanelProps {
@@ -8,31 +9,21 @@ interface ComposerPendingApprovalPanelProps {
   className?: string;
 }
 
+/**
+ * Names what is waiting on the user, next to the decision buttons. The request
+ * itself is too long to read on one row, so it lives in
+ * ComposerPendingApprovalDetail instead.
+ */
 export const ComposerPendingApprovalPanel = memo(function ComposerPendingApprovalPanel({
   approval,
   pendingCount,
   className,
 }: ComposerPendingApprovalPanelProps) {
-  const fallbackLabel =
-    approval.requestKind === "mcp-elicitation"
-      ? "App access approval"
-      : approval.requestKind === "command"
-        ? "Command approval"
-        : approval.requestKind === "file-read"
-          ? "File read approval"
-          : "File change approval";
-  const detailAriaLabel =
-    approval.requestKind === "mcp-elicitation"
-      ? "App access request"
-      : approval.requestKind === "command"
-        ? "Command"
-        : approval.requestKind === "file-read"
-          ? "File to read"
-          : "File change";
+  const label = approvalKindLabel[approval.requestKind];
 
   return (
     <div
-      aria-label={fallbackLabel}
+      aria-label={label}
       className={cn("flex min-w-0 flex-1 items-center gap-2", className)}
       role="group"
     >
@@ -41,14 +32,9 @@ export const ComposerPendingApprovalPanel = memo(function ComposerPendingApprova
           {approval.appName}
         </span>
       ) : null}
-      <code
-        aria-label={detailAriaLabel}
-        className="block max-h-20 min-w-0 flex-1 overflow-auto whitespace-pre font-mono text-[11px] text-foreground/85 [scrollbar-width:thin] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70 [&::-webkit-scrollbar]:h-1.5"
-        data-approval-detail="complete"
-        tabIndex={0}
-      >
-        {approval.detail || fallbackLabel}
-      </code>
+      <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">
+        {label}
+      </span>
       {pendingCount > 1 ? (
         <span className="shrink-0 text-[10px] font-medium text-muted-foreground tabular-nums">
           1/{pendingCount}
