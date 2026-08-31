@@ -4,6 +4,15 @@ T3 Code is a minimal GUI for coding agents. A Node WebSocket server wraps provid
 
 You can think of T3 Code as an open source "bring-your-own-subscription" alternative to apps like Claude Desktop, Codex App, Cursor Glass and Conductor.
 
+## Fork note
+
+This checkout is a personal fork of pingdotgg/t3code, maintained as a small patch
+stack on top of exactly one upstream release tag. Before any repo-maintenance
+work — rebasing onto a new upstream version, release builds, rollbacks — read
+`FORK.md` and follow its checklist. In particular, "rebase on vX" means the full
+port procedure there, not a plain `git rebase`: pin the old tip as a tag, rebase
+the stack, repoint `UPSTREAM_BASE` in `build.sh`, and force-push.
+
 ## What makes T3 Code special?
 
 We have over 200,000 users who love T3 Code. It's important we maintain the things they love as we continue to iterate on the product. Here's a brief list of the things we can never compromise on.
