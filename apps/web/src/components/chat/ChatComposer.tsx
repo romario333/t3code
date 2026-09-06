@@ -325,6 +325,11 @@ import {
   renderProviderTraitsPicker,
 } from "./composerProviderState";
 import { ContextWindowMeter, ContextWindowMeterPlaceholder } from "./ContextWindowMeter";
+import { ProviderLimitsMeter } from "./ProviderLimitsMeter";
+import {
+  deriveProviderLimitsMeter,
+  type ProviderLimitsMeterState,
+} from "./ProviderLimitsMeter.logic";
 import {
   providerSupportsManualCompaction,
   resolveContextWindowModelDisplayName,
@@ -1353,6 +1358,10 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   activeContextWindow: ContextWindowSnapshot | null;
   reserveContextWindowMeter: boolean;
   activeThreadModelDisplayName: string | null;
+  activeProviderLimits: ProviderLimitsMeterState | null;
+  /** Follows the composer's selected instance, not the thread's. */
+  selectedProviderLabel: string;
+  onOpenUsageLimits: (() => void) | undefined;
   isPreparingWorktree: boolean;
   pendingAction: {
     questionIndex: number;
@@ -1390,6 +1399,13 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
 }) {
   return (
     <>
+      {props.activeProviderLimits ? (
+        <ProviderLimitsMeter
+          state={props.activeProviderLimits}
+          providerLabel={props.selectedProviderLabel}
+          onOpenDetails={props.onOpenUsageLimits}
+        />
+      ) : null}
       {props.activeContextWindow ? (
         <ContextWindowMeter
           usage={props.activeContextWindow}
@@ -2363,6 +2379,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         (multipleModelSelections === null ? providerSendBlockReason : null)));
   const isSendDisabled = sendDisabledReason !== null;
   const selectedProviderStatus = selectedProviderEntry?.snapshot ?? null;
+  // Limits are account state for the instance that will run the *next* turn,
+  // so they follow the composer's selection rather than the thread's.
+  const activeProviderLimits = deriveProviderLimitsMeter(selectedProviderStatus?.usageLimits);
   const compactCommandAvailable = providerSupportsManualCompaction(selectedProviderEntry);
   const selectedProviderSkills = selectedProviderStatus
     ? resolveProviderSkillsForCwd(selectedProviderStatus, gitCwd)
@@ -7330,6 +7349,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     }
                     reserveContextWindowMeter={reserveContextWindowMeter}
                     activeThreadModelDisplayName={activeThreadModelDisplayName}
+                    activeProviderLimits={activeProviderLimits}
+                    selectedProviderLabel={selectedProviderEntry?.displayName ?? ""}
+                    onOpenUsageLimits={props.onUsageLimitsCommand}
                     pendingAction={pendingPrimaryAction}
                     isRunning={phase === "running"}
                     canInterrupt={canInterrupt}
