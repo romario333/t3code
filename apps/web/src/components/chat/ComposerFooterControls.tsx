@@ -16,6 +16,8 @@ import { ComposerControl, ComposerControlIcon } from "./ComposerControl";
 import { focusRequestedPermission, useComposerMenuProps } from "./composerEventScope";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
 import { ContextWindowMeter, ContextWindowMeterPlaceholder } from "./ContextWindowMeter";
+import { ProviderLimitsMeter } from "./ProviderLimitsMeter";
+import type { ProviderLimitsMeterState } from "./ProviderLimitsMeter.logic";
 import { resolveModelPickerSelectedModel } from "./ModelPickerContent";
 import { ProviderModelPicker } from "./ProviderModelPicker";
 import { runtimeModeConfig } from "./runtimeModeConfig";
@@ -247,6 +249,10 @@ export const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryA
   activeContextWindow: ContextWindowSnapshot | null;
   reserveContextWindowMeter: boolean;
   activeThreadModelDisplayName: string | null;
+  activeProviderLimits: ProviderLimitsMeterState | null;
+  /** Follows the composer's selected instance, not the thread's. */
+  selectedProviderLabel: string;
+  onOpenUsageLimits: (() => void) | undefined;
   isPreparingWorktree: boolean;
   pendingAction: {
     questionIndex: number;
@@ -283,6 +289,13 @@ export const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryA
 }) {
   return (
     <>
+      {props.activeProviderLimits ? (
+        <ProviderLimitsMeter
+          state={props.activeProviderLimits}
+          providerLabel={props.selectedProviderLabel}
+          onOpenDetails={props.onOpenUsageLimits}
+        />
+      ) : null}
       {props.activeContextWindow ? (
         <ContextWindowMeter
           usage={props.activeContextWindow}
