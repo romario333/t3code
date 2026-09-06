@@ -45,6 +45,13 @@ left, so you can judge your pace before the next reset.
 
 If a window looks stale, refresh Limits to re-check every provider and hub.
 
+> Fork note
+> The composer shows a small ring next to the send button for the selected provider's tightest
+> weekly limit. The ring drains as quota is spent, and a tick marks where even spending would leave
+> it: the ring turns amber when quota nears the tick and red once it falls below, meaning the
+> window may run out before it resets. Hover the ring for a summary, or click it to open the
+> same panel as `/usage-limits`.
+
 Pick `/usage-limits` from the composer's command menu, or send it as a message, to check the
 current model's limits without leaving the conversation. The result opens above the composer and
 closes when you dismiss it or send your next message. It uses the same snapshot as **Usage → Limits**, so it does not run the agent or refresh
