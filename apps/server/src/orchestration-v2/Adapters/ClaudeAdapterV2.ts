@@ -2035,6 +2035,28 @@ function summarizeClaudeToolRequest(toolName: string, input: ClaudeNativeToolInp
     : `${toolName}: ${serialized.slice(0, 397)}...`;
 }
 
+/**
+ * What the user is asked to allow. A command is kept whole and wins over the
+ * SDK's prompt sentence: the user has to read all of it before approving, and
+ * a cut command hides its tail.
+ */
+function describeClaudeApprovalRequest(
+  toolName: string,
+  input: ClaudeNativeToolInput,
+  callbackOptions: Pick<Parameters<CanUseTool>[2], "title" | "description" | "decisionReason">,
+): string {
+  const command = firstStringInputField(input, ["command", "cmd", "script"]);
+  if (command !== undefined) {
+    return `${toolName}: ${command}`;
+  }
+  return (
+    callbackOptions.title ??
+    callbackOptions.description ??
+    callbackOptions.decisionReason ??
+    summarizeClaudeToolRequest(toolName, input)
+  );
+}
+
 function outputFromClaudeToolResult(
   toolResult: ClaudeToolResultContentBlock,
 ): ClaudeToolResultOutput | undefined {
@@ -6855,11 +6877,7 @@ export function makeClaudeAdapterV2(
           }
 
           const requestKind = providerRequestKindFromClaudeTool(toolName);
-          const prompt =
-            callbackOptions.title ??
-            callbackOptions.description ??
-            callbackOptions.decisionReason ??
-            summarizeClaudeToolRequest(toolName, nativeToolInput);
+          const prompt = describeClaudeApprovalRequest(toolName, nativeToolInput, callbackOptions);
           const artifacts = yield* buildApprovalRequestArtifacts({
             context,
             nativeItemId: nativeRequestId,
