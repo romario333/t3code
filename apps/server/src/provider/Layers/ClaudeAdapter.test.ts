@@ -5917,6 +5917,94 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
+  it.effect("keeps the whole command in the approval request detail", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "approval-required",
+      });
+
+      yield* Stream.take(adapter.streamEvents, 3).pipe(Stream.runDrain);
+
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "run the long command",
+        attachments: [],
+      });
+      yield* Stream.take(adapter.streamEvents, 1).pipe(Stream.runDrain);
+
+      harness.query.emit({
+        type: "stream_event",
+        session_id: "sdk-session-approval-long",
+        uuid: "stream-approval-long-thread",
+        parent_tool_use_id: null,
+        event: {
+          type: "message_start",
+          message: {
+            id: "msg-approval-long-thread",
+          },
+        },
+      } as unknown as SDKMessage);
+
+      const threadStarted = yield* Stream.runHead(adapter.streamEvents);
+      assert.equal(threadStarted._tag, "Some");
+      if (threadStarted._tag !== "Some" || threadStarted.value.type !== "thread.started") {
+        return;
+      }
+
+      const canUseTool = harness.getLastCreateQueryInput()?.options.canUseTool;
+      assert.equal(typeof canUseTool, "function");
+      if (!canUseTool) {
+        return;
+      }
+
+      const command = `printf '%s\\n' ${Array.from(
+        { length: 40 },
+        (_, index) => `"segment-${index} lorem ipsum dolor sit amet"`,
+      ).join(" ")}`;
+      assert.isAbove(command.length, 400);
+
+      const permissionPromise = canUseTool(
+        "Bash",
+        { command },
+        {
+          signal: new AbortController().signal,
+          requestId: "request-long",
+          toolUseID: "tool-use-long",
+        },
+      );
+
+      const requested = yield* Stream.runHead(adapter.streamEvents);
+      assert.equal(requested._tag, "Some");
+      if (requested._tag !== "Some" || requested.value.type !== "request.opened") {
+        assert.fail("expected a request.opened event");
+        return;
+      }
+      assert.equal(requested.value.payload.detail, `Bash: ${command}`);
+
+      const runtimeRequestId = requested.value.requestId;
+      if (runtimeRequestId === undefined) {
+        assert.fail("expected a runtime request id");
+        return;
+      }
+      yield* adapter.respondToRequest(
+        session.threadId,
+        ApprovalRequestId.make(runtimeRequestId),
+        "accept",
+      );
+      yield* Stream.take(adapter.streamEvents, 1).pipe(Stream.runDrain);
+      const permissionResult = yield* Effect.promise(() => permissionPromise);
+      assert.equal((permissionResult as PermissionResult).behavior, "allow");
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
   it.effect("acceptForSession returns session-scoped permission updates", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {

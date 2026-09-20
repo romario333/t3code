@@ -1388,16 +1388,22 @@ function workflowAgentStatus(entry: ClaudeWorkflowAgentEntry): RuntimeTaskStatus
   }
 }
 
+function readToolCommand(input: Record<string, unknown>): string | undefined {
+  const commandValue = input.command ?? input.cmd;
+  const command = typeof commandValue === "string" ? commandValue.trim() : "";
+  return command.length > 0 ? command : undefined;
+}
+
+/** Timeline label for a tool call; long inputs are cut so rows stay small. */
 function summarizeToolRequest(toolName: string, input: Record<string, unknown>): string {
   const imagePath = readToolImagePath(toolName, input);
   if (imagePath) {
     return imagePath;
   }
 
-  const commandValue = input.command ?? input.cmd;
-  const command = typeof commandValue === "string" ? commandValue : undefined;
-  if (command && command.trim().length > 0) {
-    return `${toolName}: ${command.trim().slice(0, 400)}`;
+  const command = readToolCommand(input);
+  if (command) {
+    return `${toolName}: ${command.slice(0, 400)}`;
   }
 
   // For agent/subagent tools, prefer the human-readable description or prompt
@@ -1419,6 +1425,15 @@ function summarizeToolRequest(toolName: string, input: Record<string, unknown>):
     return `${toolName}: ${serialized}`;
   }
   return `${toolName}: ${serialized.slice(0, 397)}...`;
+}
+
+/**
+ * What the user is asked to allow. A command is kept whole: the user has to
+ * read all of it before approving, and a cut command hides its tail.
+ */
+function describeApprovalRequest(toolName: string, input: Record<string, unknown>): string {
+  const command = readToolCommand(input);
+  return command ? `${toolName}: ${command}` : summarizeToolRequest(toolName, input);
 }
 
 function titleForTool(itemType: CanonicalItemType): string {
@@ -4528,7 +4543,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
 
         const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
         const requestType = classifyRequestType(toolName);
-        const detail = summarizeToolRequest(toolName, toolInput);
+        const detail = describeApprovalRequest(toolName, toolInput);
         const decisionDeferred = yield* Deferred.make<ProviderApprovalDecision>();
         const pendingApproval: PendingApproval = {
           requestType,
