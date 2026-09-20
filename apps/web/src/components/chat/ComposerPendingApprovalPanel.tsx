@@ -50,7 +50,7 @@ export const ComposerPendingApprovalPanel = memo(function ComposerPendingApprova
           "block max-h-20 w-full min-w-0 overflow-auto text-xs text-foreground [scrollbar-width:thin] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70 [&::-webkit-scrollbar]:h-1.5",
           approval.requestKind === "mcp-elicitation"
             ? "whitespace-pre-wrap font-sans wrap-break-word"
-            : "whitespace-pre font-mono",
+            : "whitespace-pre-wrap font-mono wrap-break-word",
         )}
         data-approval-detail="complete"
         tabIndex={0}
