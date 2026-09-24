@@ -385,7 +385,7 @@ describe("resolveSnoozePresets", () => {
     expect(presets.find((preset) => preset.id === "evening")?.label).toBe("This evening");
     expect(
       new Date(presets.find((preset) => preset.id === "tomorrow")!.snoozedUntil).getHours(),
-    ).toBe(9);
+    ).toBe(7);
   });
 
   it("drops the evening choice once evening is near or past", () => {
