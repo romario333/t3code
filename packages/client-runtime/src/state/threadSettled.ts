@@ -169,7 +169,7 @@ export function threadWokeAt(
 
 const HOUR_MS = 60 * 60 * 1_000;
 const EVENING_HOUR = 18;
-const MORNING_HOUR = 9;
+const MORNING_HOUR = 7;
 
 export type SnoozePresetId = "hour" | "three-hours" | "evening" | "tomorrow" | "next-week";
 
