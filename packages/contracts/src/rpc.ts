@@ -110,6 +110,7 @@ import {
   OrchestrationRpcSchemas,
   OrchestrationGetWorkflowScriptError,
 } from "./orchestration.ts";
+import { OrchestrationGetToolOutputInput, OrchestrationGetToolOutputResult } from "./toolOutput.ts";
 import {
   ProviderUploadFeedbackError,
   ProviderUploadFeedbackInput,
@@ -1332,6 +1333,12 @@ const WsOrchestrationGetFullThreadDiffRpc = Rpc.make(ORCHESTRATION_WS_METHODS.ge
   error: Schema.Union([OrchestrationGetFullThreadDiffError, EnvironmentAuthorizationError]),
 });
 
+const WsOrchestrationGetToolOutputRpc = Rpc.make(ORCHESTRATION_WS_METHODS.getToolOutput, {
+  payload: OrchestrationGetToolOutputInput,
+  success: OrchestrationGetToolOutputResult,
+  error: Schema.Union([OrchestrationGetSnapshotError, EnvironmentAuthorizationError]),
+});
+
 const WsOrchestrationSearchThreadsRpc = Rpc.make(ORCHESTRATION_WS_METHODS.searchThreads, {
   payload: OrchestrationSearchThreadsInput,
   success: OrchestrationRpcSchemas.searchThreads.output,
@@ -1572,6 +1579,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationGetWorkflowScriptRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,
+  WsOrchestrationGetToolOutputRpc,
   WsOrchestrationSearchThreadsRpc,
   WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,
