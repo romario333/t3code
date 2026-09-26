@@ -2311,10 +2311,14 @@ const WorkGroupSection = memo(function WorkGroupSection({
   isExpandedToolGroup: boolean;
   displayLabel?: string | undefined;
 }) {
-  const { workspaceRoot, routeThreadKey, onToggleWorkEntry } = use(TimelineRowCtx);
+  const { workspaceRoot, workGroupViewState, onToggleWorkEntry } = use(TimelineRowCtx);
   const onToggleStandaloneEntry = useCallback(
     (collapsed: boolean) => onToggleWorkEntry(anchorKey, collapsed),
     [anchorKey, onToggleWorkEntry],
+  );
+  const groupView = useMemo(
+    () => ({ state: workGroupViewState, onToggleEntry: onToggleStandaloneEntry }),
+    [workGroupViewState, onToggleStandaloneEntry],
   );
   const nonEmptyEntries = useMemo(
     () => groupedEntries.filter((entry) => workEntryIsVisibleInGroup(entry, isExpandedToolGroup)),
@@ -2322,14 +2326,21 @@ const WorkGroupSection = memo(function WorkGroupSection({
   );
 
   if (nonEmptyEntries.length === 0) return null;
+  // Fork: expanded groups grow with the thread instead of scrolling in a capped box.
   if (isExpandedToolGroup) {
     return (
-      <ExpandedWorkGroupEntries
-        key={`${routeThreadKey}:${anchorKey}`}
-        anchorKey={anchorKey}
-        entries={nonEmptyEntries}
-        workspaceRoot={workspaceRoot}
-      />
+      <WorkGroupViewCtx value={groupView}>
+        <section className="space-y-px" aria-label="Tool calls">
+          {nonEmptyEntries.map((workEntry) => (
+            <SimpleWorkEntryRow
+              key={workEntry.id}
+              workEntry={workEntry}
+              workspaceRoot={workspaceRoot}
+              isExpandedToolGroupEntry
+            />
+          ))}
+        </section>
+      </WorkGroupViewCtx>
     );
   }
 
@@ -2351,6 +2362,7 @@ const WorkGroupSection = memo(function WorkGroupSection({
   );
 });
 
+// oxlint-disable-next-line no-unused-vars -- fork: unused, kept to keep the upstream diff small
 function ExpandedWorkGroupEntries({
   anchorKey,
   entries,
