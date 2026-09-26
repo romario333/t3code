@@ -240,6 +240,7 @@ import { type TimestampFormat } from "@t3tools/contracts/settings";
 import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../timestampFormat";
 
 import { SkillInlineText } from "./SkillInlineText";
+import { ToolCallDetails } from "./ToolCallDetails";
 import { deriveAgentSpawnSummary } from "./agentSpawnSummary";
 import { formatWorkspaceRelativePath } from "../../filePathDisplay";
 import {
@@ -4220,6 +4221,12 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
       workEntry.changedFiles?.length ||
       viewedImage,
     );
+  const outputToolCallId =
+    (workEntry.itemType === "command_execution" || workEntry.itemType === "mcp_tool_call") &&
+    workEntry.sourceActivityKind === "tool.completed"
+      ? workEntry.toolCallId
+      : undefined;
+  const showsToolCallDetails = Boolean(outputToolCallId && threadRef);
   const expandedBody = expanded
     ? buildToolCallExpandedBody(
         workEntry,
@@ -4298,7 +4305,9 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
               <span
                 className={cn(
                   answerPreview ? "shrink-0" : "min-w-0 flex-1",
-                  expanded ? "whitespace-pre-wrap break-words select-text" : "truncate",
+                  expanded && !showsToolCallDetails
+                    ? "whitespace-pre-wrap break-words select-text"
+                    : "truncate",
                   headingClass,
                 )}
                 onClick={expanded ? stopRowToggleWhileSelectingText : undefined}
@@ -4363,13 +4372,25 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
       {expanded && workEntry.questionAnswer ? (
         <QuestionAnswerHistory answer={workEntry.questionAnswer} />
       ) : null}
-      {expanded && canExpand && expandedBody && !workEntry.questionAnswer ? (
+      {expanded &&
+      canExpand &&
+      (expandedBody || showsToolCallDetails) &&
+      !workEntry.questionAnswer ? (
         <div
           className="mt-1 ms-7 cursor-default rounded-md bg-muted/40 px-3 py-2"
           onClick={stopRowToggle}
           onPointerDown={stopRowToggle}
         >
-          <pre className={toolCallExpandedBodyClassName}>{expandedBody}</pre>
+          {outputToolCallId && threadRef ? (
+            <ToolCallDetails
+              environmentId={threadRef.environmentId}
+              threadId={threadRef.threadId}
+              toolCallId={outputToolCallId}
+              entry={workEntry}
+            />
+          ) : (
+            <pre className={toolCallExpandedBodyClassName}>{expandedBody}</pre>
+          )}
         </div>
       ) : null}
     </div>
