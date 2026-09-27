@@ -1091,17 +1091,15 @@ function TerminalSessionViewport({
             fallbackToBrowser();
             return;
           }
-          void openLinkInPreview(text, event.metaKey || event.ctrlKey, fallbackToBrowser).catch(
-            (error: unknown) => {
-              toastManager.add(
-                stackedThreadToast({
-                  type: "error",
-                  title: m(msg("Unable to open link")),
-                  description: thrownErrorMessage(error, m) ?? m(msg("An error occurred.")),
-                }),
-              );
-            },
-          );
+          void openLinkInPreview(text, event.altKey, fallbackToBrowser).catch((error: unknown) => {
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title: m(msg("Unable to open link")),
+                description: thrownErrorMessage(error, m) ?? m(msg("An error occurred.")),
+              }),
+            );
+          });
           return;
         }
         const target = resolveTerminalLinkTarget(text, cwd, readHostname());
