@@ -996,17 +996,15 @@ function TerminalSessionViewport({
             fallbackToBrowser();
             return;
           }
-          void openLinkInPreview(text, event.metaKey || event.ctrlKey, fallbackToBrowser).catch(
-            (error: unknown) => {
-              toastManager.add(
-                stackedThreadToast({
-                  type: "error",
-                  title: "Unable to open link",
-                  description: error instanceof Error ? error.message : "An error occurred.",
-                }),
-              );
-            },
-          );
+          void openLinkInPreview(text, event.altKey, fallbackToBrowser).catch((error: unknown) => {
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title: "Unable to open link",
+                description: error instanceof Error ? error.message : "An error occurred.",
+              }),
+            );
+          });
           return;
         }
         const target = resolvePathLinkTarget(text, cwd);

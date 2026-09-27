@@ -308,6 +308,14 @@ export function isTerminalCopyShortcut(
   return isMacPlatform(platform) ? event.metaKey : event.ctrlKey;
 }
 
+/** Links open only with Cmd (macOS) or Ctrl held, so plain clicks always select. */
+export function isTerminalLinkModifier(
+  event: Pick<MouseEvent, "ctrlKey" | "metaKey">,
+  platform = navigator.platform,
+): boolean {
+  return isMacPlatform(platform) ? event.metaKey : event.ctrlKey;
+}
+
 /** Primes native and Electron menu copy from the focused textarea; canvas has no DOM selection. */
 export function primeTerminalCopyInput(
   input: Pick<HTMLTextAreaElement, "value" | "select">,
@@ -577,6 +585,7 @@ export class GhosttyTerminalSurface {
     clickCount: number;
   } | null = null;
   private hoveredLink: TerminalLinkWithRange | null = null;
+  private linkModifierHeld = false;
   private hoverPointer: { x: number; y: number } | null = null;
   private selectionClickSequence: TerminalSelectionClickSequence | null = null;
   private selectionMoved = false;
@@ -1363,8 +1372,11 @@ export class GhosttyTerminalSurface {
     }
     if (event.button !== 0) return;
     const clickCount = this.recordSelectionClick(event);
-    const link = this.linkAt(event.clientX, event.clientY);
-    if (link && !event.shiftKey && clickCount === 1) {
+    const link =
+      isTerminalLinkModifier(event) && !event.shiftKey
+        ? this.linkAt(event.clientX, event.clientY)
+        : null;
+    if (link && clickCount === 1) {
       event.preventDefault();
       event.stopPropagation();
       this.linkActivationPointerId = event.pointerId;
@@ -1544,6 +1556,26 @@ export class GhosttyTerminalSurface {
 
   private updateHoverCursor(event: PointerEvent): void {
     this.hoverPointer = { x: event.clientX, y: event.clientY };
+    this.linkModifierHeld = isTerminalLinkModifier(event);
+    this.refreshHoveredLink();
+  }
+
+  // Window-level so pressing or releasing the modifier over a still pointer
+  // updates link feedback even when the terminal is not focused.
+  private readonly onLinkModifierKey = (event: KeyboardEvent) => {
+    const held = isTerminalLinkModifier(event);
+    if (held === this.linkModifierHeld) return;
+    this.linkModifierHeld = held;
+    this.refreshHoveredLinkForModifier();
+  };
+
+  private readonly onWindowBlur = () => {
+    this.linkModifierHeld = false;
+    this.refreshHoveredLinkForModifier();
+  };
+
+  private refreshHoveredLinkForModifier(): void {
+    if (this.hoverPointer === null || this.mouseReportingPointerId !== null) return;
     this.refreshHoveredLink();
   }
 
@@ -1560,7 +1592,7 @@ export class GhosttyTerminalSurface {
 
   private refreshHoveredLink(): void {
     const pointer = this.hoverPointer;
-    const link = pointer ? this.linkAt(pointer.x, pointer.y) : null;
+    const link = pointer && this.linkModifierHeld ? this.linkAt(pointer.x, pointer.y) : null;
     this.setHoveredLink(link);
   }
 
@@ -1793,6 +1825,9 @@ export class GhosttyTerminalSurface {
     this.scrollbar.addEventListener("keydown", this.onScrollbarKeyDown);
     window.addEventListener("pointerup", this.onWindowPointerRelease);
     window.addEventListener("pointercancel", this.onWindowPointerRelease);
+    window.addEventListener("keydown", this.onLinkModifierKey, true);
+    window.addEventListener("keyup", this.onLinkModifierKey, true);
+    window.addEventListener("blur", this.onWindowBlur);
   }
 
   private removeEvents(): void {
@@ -1823,6 +1858,9 @@ export class GhosttyTerminalSurface {
     this.scrollbar.removeEventListener("keydown", this.onScrollbarKeyDown);
     window.removeEventListener("pointerup", this.onWindowPointerRelease);
     window.removeEventListener("pointercancel", this.onWindowPointerRelease);
+    window.removeEventListener("keydown", this.onLinkModifierKey, true);
+    window.removeEventListener("keyup", this.onLinkModifierKey, true);
+    window.removeEventListener("blur", this.onWindowBlur);
   }
 
   private scrollViewport(deltaRows: number): void {
