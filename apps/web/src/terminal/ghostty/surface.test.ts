@@ -12,6 +12,7 @@ import {
   isTerminalCompositionCommitInput,
   isTerminalCompositionKey,
   isTerminalCopyShortcut,
+  isTerminalLinkModifier,
   isTerminalPasteShortcut,
   loadTerminalFontFamily,
   primeTerminalCopyInput,
@@ -167,7 +168,14 @@ describe("GhosttyTerminalSurface visibility", () => {
       resize() {
         for (const callback of resizeCallbacks) callback();
       },
-      pointer(type: string, clientX: number, buttons: number, shiftKey = false, button = 0) {
+      pointer(
+        type: string,
+        clientX: number,
+        buttons: number,
+        shiftKey = false,
+        button = 0,
+        linkModifier = false,
+      ) {
         canvas.dispatchEvent(
           Object.assign(new Event(type, { cancelable: true }), {
             clientX,
@@ -176,6 +184,9 @@ describe("GhosttyTerminalSurface visibility", () => {
             button,
             buttons,
             shiftKey,
+            // Cmd on macOS, Ctrl elsewhere; set both so the test is platform-independent.
+            ctrlKey: linkModifier,
+            metaKey: linkModifier,
           }),
         );
       },
@@ -312,9 +323,9 @@ describe("GhosttyTerminalSurface visibility", () => {
     surface.write("https://example.com");
     harness.flushFrame();
 
-    harness.pointer("pointerdown", 5, 1);
-    harness.pointer("pointermove", 37, 1);
-    harness.pointer("pointerup", 37, 0);
+    harness.pointer("pointerdown", 5, 1, false, 0, true);
+    harness.pointer("pointermove", 37, 1, false, 0, true);
+    harness.pointer("pointerup", 37, 0, false, 0, true);
 
     expect(onLinkActivate).not.toHaveBeenCalled();
     expect(surface.getSelection()).toBe("https");
@@ -327,14 +338,14 @@ describe("GhosttyTerminalSurface visibility", () => {
     surface.write("https://example.com");
     harness.flushFrame();
 
-    harness.pointer("pointerdown", 5, 1);
-    harness.pointer("pointermove", 6, 1);
-    harness.pointer("pointerup", 6, 0);
+    harness.pointer("pointerdown", 5, 1, false, 0, true);
+    harness.pointer("pointermove", 6, 1, false, 0, true);
+    harness.pointer("pointerup", 6, 0, false, 0, true);
 
     expect(onLinkActivate).toHaveBeenCalledOnce();
   });
 
-  it("uses repeated link clicks for word and line selection", async () => {
+  it("selects instead of activating on plain clicks over a link", async () => {
     const harness = createHarness();
     const onLinkActivate = vi.fn();
     const surface = await harness.create({ onLinkActivate });
@@ -345,13 +356,12 @@ describe("GhosttyTerminalSurface visibility", () => {
     harness.pointer("pointerup", 5, 0);
     harness.pointer("pointerdown", 5, 1);
     harness.pointer("pointerup", 5, 0);
-    expect(onLinkActivate).toHaveBeenCalledOnce();
     expect(surface.getSelection()).not.toBe("");
 
     harness.pointer("pointerdown", 5, 1);
     harness.pointer("pointerup", 5, 0);
-    expect(onLinkActivate).toHaveBeenCalledOnce();
     expect(surface.getSelection()).toBe("https://example.com tail");
+    expect(onLinkActivate).not.toHaveBeenCalled();
   });
 
   it("uses Shift drags over links for selection", async () => {
@@ -375,10 +385,10 @@ describe("GhosttyTerminalSurface visibility", () => {
     surface.write("https://first.example");
     harness.flushFrame();
 
-    harness.pointer("pointerdown", 5, 1);
+    harness.pointer("pointerdown", 5, 1, false, 0, true);
     surface.write("\x1b[2J\x1b[Hhttps://second.example");
     harness.flushFrame();
-    harness.pointer("pointerup", 5, 0);
+    harness.pointer("pointerup", 5, 0, false, 0, true);
 
     expect(onLinkActivate).not.toHaveBeenCalled();
   });
@@ -630,6 +640,19 @@ describe("terminalLinkAtPositionWithRange", () => {
       wrapsToNext: false,
     };
     expect(terminalLinkAtPositionWithRange([unwrittenTail], 0, 8)?.text).toBe("https://t3.codes");
+  });
+});
+
+describe("isTerminalLinkModifier", () => {
+  it("opens links with Cmd on macOS so Ctrl-click stays a context click", () => {
+    expect(isTerminalLinkModifier({ ctrlKey: false, metaKey: true }, "MacIntel")).toBe(true);
+    expect(isTerminalLinkModifier({ ctrlKey: true, metaKey: false }, "MacIntel")).toBe(false);
+  });
+
+  it("opens links with Ctrl elsewhere and never on a plain click", () => {
+    expect(isTerminalLinkModifier({ ctrlKey: true, metaKey: false }, "Linux x86_64")).toBe(true);
+    expect(isTerminalLinkModifier({ ctrlKey: false, metaKey: false }, "Linux x86_64")).toBe(false);
+    expect(isTerminalLinkModifier({ ctrlKey: false, metaKey: false }, "MacIntel")).toBe(false);
   });
 });
 
