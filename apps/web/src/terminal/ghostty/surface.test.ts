@@ -5,6 +5,7 @@ import {
   nextTerminalAttachSeedState,
 } from "@t3tools/client-runtime/state/terminal";
 import { synchronizeTerminalSession } from "../../components/ThreadTerminalDrawer";
+import { isMacPlatform } from "../../lib/utils";
 
 import { GhosttyTerminalCore, type GhosttyCell, type GhosttyRow } from "./core";
 import {
@@ -13,6 +14,7 @@ import {
   clearPrimedTerminalCopyInput,
   isTerminalCompositionKey,
   isTerminalCopyShortcut,
+  isTerminalLinkModifier,
   primeTerminalCopyInput,
   resolveTerminalMouseData,
   terminalLinkAtPositionWithRange,
@@ -22,6 +24,11 @@ import {
   GhosttyTerminalSurface,
   type GhosttyTerminalSurfaceOptions,
 } from "./surface";
+
+// Cmd on macOS, Ctrl elsewhere. Read per call because some tests stub the platform,
+// and Ctrl+click on macOS is a context click.
+const linkModifier = () =>
+  isMacPlatform(navigator.platform) ? { metaKey: true } : { ctrlKey: true };
 
 vi.mock("./vendor/ghostty-vt.wasm?url", async () => ({
   default: (await import("./vendor/ghostty-vt.wasm?inline")).default,
@@ -648,6 +655,39 @@ describe("GhosttyTerminalSurface visibility", () => {
     expect(surface.getSelection()).toBe("row 6\nrow 7\nrow 8");
   });
 
+  it("keeps a link click active through slight pointer movement", async () => {
+    const harness = createHarness();
+    const onLinkActivate = vi.fn();
+    const surface = await harness.create({ onLinkActivate });
+    surface.write("https://example.com");
+    harness.flushFrame();
+
+    harness.pointer("pointerdown", 5, 1, linkModifier());
+    harness.pointer("pointermove", 6, 1, linkModifier());
+    harness.pointer("pointerup", 6, 0, linkModifier());
+
+    expect(onLinkActivate).toHaveBeenCalledOnce();
+  });
+
+  it("selects instead of activating on plain clicks over a link", async () => {
+    const harness = createHarness();
+    const onLinkActivate = vi.fn();
+    const surface = await harness.create({ onLinkActivate });
+    surface.write("https://example.com tail");
+    harness.flushFrame();
+
+    harness.pointer("pointerdown", 5, 1);
+    harness.pointer("pointerup", 5, 0);
+    harness.pointer("pointerdown", 5, 1);
+    harness.pointer("pointerup", 5, 0);
+    expect(surface.getSelection()).not.toBe("");
+
+    harness.pointer("pointerdown", 5, 1);
+    harness.pointer("pointerup", 5, 0);
+    expect(surface.getSelection()).toBe("https://example.com tail");
+    expect(onLinkActivate).not.toHaveBeenCalled();
+  });
+
   it("does not activate a link replaced before pointer release", async () => {
     const harness = createHarness();
     const onLinkActivate = vi.fn();
@@ -655,10 +695,10 @@ describe("GhosttyTerminalSurface visibility", () => {
     surface.write("https://first.example");
     harness.flushFrame();
 
-    harness.pointer("pointerdown", 5, 1);
+    harness.pointer("pointerdown", 5, 1, linkModifier());
     surface.write("\x1b[2J\x1b[Hhttps://second.example");
     harness.flushFrame();
-    harness.pointer("pointerup", 5, 0);
+    harness.pointer("pointerup", 5, 0, linkModifier());
 
     expect(onLinkActivate).not.toHaveBeenCalled();
   });
@@ -694,16 +734,16 @@ describe("GhosttyTerminalSurface visibility", () => {
       harness.flushFrame();
       surface.selectAll();
       expect(surface.getSelection()).toBe("src/main.ts");
-      harness.pointer("pointerdown", 5, 1);
+      harness.pointer("pointerdown", 5, 1, linkModifier());
       expect(validateLink).toHaveBeenCalledWith("src/main.ts");
-      if (scenario === "dragged") harness.pointer("pointermove", 45, 1);
-      harness.pointer("pointerup", 5, 0);
+      if (scenario === "dragged") harness.pointer("pointermove", 45, 1, linkModifier());
+      harness.pointer("pointerup", 5, 0, linkModifier());
       expect(onLinkActivate).not.toHaveBeenCalled();
       if (scenario === "replaced") {
         surface.write("\r\x1b[2Ksrc/other.ts");
         harness.flushFrame();
       }
-      if (scenario === "superseded") harness.pointer("pointerdown", 5, 1);
+      if (scenario === "superseded") harness.pointer("pointerdown", 5, 1, linkModifier());
       if (scenario === "hidden") {
         surface.setVisible(false);
         surface.setVisible(true);
@@ -752,8 +792,8 @@ describe("GhosttyTerminalSurface visibility", () => {
     vi.advanceTimersByTime(250);
     harness.pointer("pointermove", 5, 0);
     expect(onLinkHover).toHaveBeenLastCalledWith("./a:1:22:DD", "./a:1:22");
-    harness.pointer("pointerdown", 5, 1);
-    harness.pointer("pointerup", 5, 0);
+    harness.pointer("pointerdown", 5, 1, linkModifier());
+    harness.pointer("pointerup", 5, 0, linkModifier());
     await vi.waitFor(() =>
       expect(validateLink).toHaveBeenCalledTimes(existing === "./a:1:22:DD" ? 1 : 2),
     );
@@ -1073,6 +1113,19 @@ describe("terminalLinkAtPositionWithRange", () => {
       wrapsToNext: false,
     };
     expect(terminalLinkAtPositionWithRange([unwrittenTail], 0, 8)?.text).toBe("https://t3.codes");
+  });
+});
+
+describe("isTerminalLinkModifier", () => {
+  it("opens links with Cmd on macOS so Ctrl-click stays a context click", () => {
+    expect(isTerminalLinkModifier({ ctrlKey: false, metaKey: true }, "MacIntel")).toBe(true);
+    expect(isTerminalLinkModifier({ ctrlKey: true, metaKey: false }, "MacIntel")).toBe(false);
+  });
+
+  it("opens links with Ctrl elsewhere and never on a plain click", () => {
+    expect(isTerminalLinkModifier({ ctrlKey: true, metaKey: false }, "Linux x86_64")).toBe(true);
+    expect(isTerminalLinkModifier({ ctrlKey: false, metaKey: false }, "Linux x86_64")).toBe(false);
+    expect(isTerminalLinkModifier({ ctrlKey: false, metaKey: false }, "MacIntel")).toBe(false);
   });
 });
 
