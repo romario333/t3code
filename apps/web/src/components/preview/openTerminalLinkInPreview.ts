@@ -34,13 +34,13 @@ interface OpenTerminalLinkInPreviewInput<E> {
   readonly threadRef: ScopedThreadRef;
   readonly openPreview: OpenPreviewMutation<E>;
   readonly fallbackToBrowser: () => void;
-  /** Cmd/Ctrl-click bypasses the preference and opens in the system browser. */
+  /** Cmd/Ctrl+Option/Alt-click bypasses the preference and opens in the system browser. */
   readonly forceBrowser: boolean;
 }
 
 /**
  * Opens a terminal hyperlink where the "Open links in" setting says, unless a
- * Cmd/Ctrl-click explicitly requests the system browser.
+ * Cmd/Ctrl+Option/Alt-click explicitly requests the system browser.
  */
 export async function openTerminalLinkInPreview<E>(
   input: OpenTerminalLinkInPreviewInput<E>,
