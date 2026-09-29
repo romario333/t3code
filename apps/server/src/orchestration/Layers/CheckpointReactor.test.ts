@@ -1031,7 +1031,7 @@ describe("CheckpointReactor", () => {
   });
 
   it.each(["t3code/original-branch", "t3code/fd9cbe0e"])(
-    "does not adopt a drifted checkout from %s when the worktree is shared by another thread",
+    "adopts a drifted checkout from %s only for the thread whose turn ran in a shared worktree",
     async (threadBranch) => {
       const pullRequestRefreshCalls: string[] = [];
       const harness = await createHarness({
@@ -1056,8 +1056,10 @@ describe("CheckpointReactor", () => {
 
       const snapshot = await harness.readModel();
       const thread = snapshot.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
-      expect(thread?.branch).toBe(threadBranch);
-      expect(pullRequestRefreshCalls).toEqual([]);
+      const sibling = snapshot.threads.find((entry) => entry.id === ThreadId.make("thread-2"));
+      expect(thread?.branch).toBe("t3code/renamed-by-agent");
+      expect(sibling?.branch).toBeNull();
+      expect(pullRequestRefreshCalls).toEqual([harness.cwd]);
     },
   );
 
