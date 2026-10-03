@@ -1155,7 +1155,8 @@ export const OrchestrationV2UserInputQuestion = Schema.Struct({
   options: Schema.Array(
     Schema.Struct({
       label: TrimmedNonEmptyString,
-      description: TrimmedNonEmptyString,
+      // Claude's AskUserQuestion allows blank descriptions; clients hide them.
+      description: Schema.String,
       value: Schema.optional(Schema.String),
     }),
   ),
