@@ -33,6 +33,7 @@ import {
   NodeId,
   type OrchestrationV2AppThread,
   type OrchestrationV2ProviderThread,
+  OrchestrationV2UserInputQuestion,
   ProjectId,
   ProviderInstanceId,
   type ProviderInstanceEnvironment,
@@ -101,6 +102,7 @@ import {
 } from "../testkit/fixtures/shared.ts";
 
 const DEFAULT_CLAUDE_SETTINGS = Schema.decodeSync(ClaudeSettings)({});
+const decodeUserInputQuestion = Schema.decodeUnknownSync(OrchestrationV2UserInputQuestion);
 const AUTO_COMPACT_CLAUDE_SETTINGS = Schema.decodeSync(ClaudeSettings)({
   autoCompactWindow: "300000",
 });
@@ -329,6 +331,37 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
     });
     assert.isTrue(
       ClaudeAdapterV2.ClaudeProviderCapabilitiesV2.planning.supportsStructuredQuestions,
+    );
+  });
+
+  it("projects AskUserQuestion options with blank descriptions as valid questions", () => {
+    const questions = ClaudeAdapterV2.claudeUserInputQuestions({
+      questions: [
+        {
+          header: "Coffee",
+          question: "How many coffees?",
+          options: [
+            { label: "0", description: "" },
+            { label: "1", description: "  " },
+          ],
+          multiSelect: false,
+        },
+      ],
+    });
+    assert.deepEqual(
+      questions.map((question) => decodeUserInputQuestion(question)),
+      [
+        {
+          id: "How many coffees?",
+          header: "Coffee",
+          question: "How many coffees?",
+          options: [
+            { label: "0", description: "" },
+            { label: "1", description: "" },
+          ],
+          multiSelect: false,
+        },
+      ],
     );
   });
 
