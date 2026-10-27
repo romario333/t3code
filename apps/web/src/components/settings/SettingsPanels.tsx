@@ -1849,6 +1849,7 @@ export function MaintenanceSettingsPanel() {
   const environmentId = environment?.environmentId ?? null;
   const isEnvironmentScope = scope.environmentIds.length === 1 && environmentId !== null;
   const hasServerTargets = connectedEnvironments.length > 0;
+  const serverOs = environment?.serverConfig?.environment.platform.os;
 
   return (
     <SettingsPageContainer>
@@ -1923,6 +1924,19 @@ export function MaintenanceSettingsPanel() {
 
       <SettingsSection id="background" title="Background activity">
         <BackgroundActivitySettingsRow />
+        {serverOs === "darwin" && (
+          <SettingsRow
+            title="Keep awake"
+            description="Prevent this Mac from sleeping while the server is running (uses caffeinate). The display can still sleep. Also available in the sidebar."
+            control={
+              <Switch
+                checked={settings.keepAwake}
+                onCheckedChange={(checked) => updateSettings({ keepAwake: Boolean(checked) })}
+                aria-label="Keep this Mac awake"
+              />
+            }
+          />
+        )}
       </SettingsSection>
 
       <StorageCleanupSections />
