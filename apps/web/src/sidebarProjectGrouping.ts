@@ -84,6 +84,23 @@ export function resolveSidebarProjectScopeKey(input: {
   return group?.projectKey ?? (input.canClearMissingScope ? null : input.key);
 }
 
+/**
+ * The project groups whose threads the sidebar lists, or null for every project.
+ * A chosen scope wins over hidden projects.
+ */
+export function resolveSidebarScopedProjectGroups<
+  T extends { readonly projectKey: string },
+>(input: {
+  readonly groups: ReadonlyArray<T>;
+  readonly scopedGroup: T | null;
+  readonly hiddenProjectKeys: ReadonlyArray<string>;
+}): ReadonlyArray<T> | null {
+  if (input.scopedGroup !== null) return [input.scopedGroup];
+  const hidden = new Set(input.hiddenProjectKeys);
+  const visible = input.groups.filter((group) => !hidden.has(group.projectKey));
+  return visible.length === input.groups.length ? null : visible;
+}
+
 export function buildPhysicalToLogicalProjectKeyMap(input: {
   projects: ReadonlyArray<Project>;
   settings: ProjectGroupingSettings;

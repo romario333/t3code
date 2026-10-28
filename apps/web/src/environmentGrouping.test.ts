@@ -6,6 +6,7 @@ import {
   buildSidebarProjectPickerEntries,
   buildSidebarProjectSnapshots,
   resolveSidebarProjectScopeKey,
+  resolveSidebarScopedProjectGroups,
   getSidebarProjectSettingsKey,
 } from "./sidebarProjectGrouping";
 import type { Project } from "./types";
@@ -274,5 +275,25 @@ describe("environment grouping", () => {
       environmentId: primaryEnvironmentId,
       id: fallbackPrimary.id,
     });
+  });
+
+  it("lists every project except hidden ones, and lets a chosen scope win", () => {
+    const groups = [{ projectKey: "a" }, { projectKey: "b" }, { projectKey: "c" }];
+    expect(
+      resolveSidebarScopedProjectGroups({ groups, scopedGroup: null, hiddenProjectKeys: [] }),
+    ).toBeNull();
+    expect(
+      resolveSidebarScopedProjectGroups({ groups, scopedGroup: null, hiddenProjectKeys: ["gone"] }),
+    ).toBeNull();
+    expect(
+      resolveSidebarScopedProjectGroups({ groups, scopedGroup: null, hiddenProjectKeys: ["b"] }),
+    ).toEqual([{ projectKey: "a" }, { projectKey: "c" }]);
+    expect(
+      resolveSidebarScopedProjectGroups({
+        groups,
+        scopedGroup: groups[1]!,
+        hiddenProjectKeys: ["b"],
+      }),
+    ).toEqual([{ projectKey: "b" }]);
   });
 });
