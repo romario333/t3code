@@ -12,6 +12,7 @@ import {
   reorderProjects,
   resolveProjectExpanded,
   setProjectExpanded,
+  setSidebarProjectHidden,
   type UiState,
 } from "./uiStateStore";
 
@@ -20,6 +21,7 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
     projectExpandedById: {},
     projectOrder: [],
     sidebarProjectScopeKeys: [],
+    sidebarHiddenProjectKeys: [],
     threadLastVisitedAtById: {},
     defaultAdvertisedEndpointKey: null,
     pullRequestMergeMethod: "merge",
@@ -118,6 +120,7 @@ describe("parsePersistedState", () => {
       },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
       sidebarProjectScopeKeys: [],
+      sidebarHiddenProjectKeys: [],
       pullRequestMergeMethod: "merge",
     });
   });
@@ -205,6 +208,7 @@ describe("uiStateStore persistence", () => {
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
       sidebarProjectScopeKeys: [],
       sidebarProjectScopeKey: null,
+      sidebarHiddenProjectKeys: [],
       pullRequestMergeMethod: "merge",
     });
     expect(parsePersistedState(persisted)).toEqual({
@@ -253,5 +257,20 @@ describe("uiStateStore persistence", () => {
       parsePersistedState({ sidebarProjectScopeKey: "github.com/pingdotgg/t3code" })
         .sidebarProjectScopeKeys,
     ).toEqual(["github.com/pingdotgg/t3code"]);
+  });
+
+  it("restores hidden sidebar projects across reloads", () => {
+    const hidden = setSidebarProjectHidden(
+      setSidebarProjectHidden(makeUiState(), "project-a", true),
+      "project-b",
+      true,
+    );
+    persistState(setSidebarProjectHidden(hidden, "project-a", false));
+
+    const persisted = JSON.parse(
+      localStorageStub.getItem(PERSISTED_STATE_KEY) ?? "{}",
+    ) as PersistedUiState;
+
+    expect(parsePersistedState(persisted).sidebarHiddenProjectKeys).toEqual(["project-b"]);
   });
 });
