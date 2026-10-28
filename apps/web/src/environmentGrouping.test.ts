@@ -9,6 +9,7 @@ import {
   buildSidebarProjectPickerEntries,
   buildSidebarProjectSnapshots,
   resolveSidebarProjectScopeKey,
+  resolveSidebarScopedProjectGroups,
   getSidebarProjectSettingsKey,
 } from "./sidebarProjectGrouping";
 import type { Project } from "./types";
@@ -300,5 +301,25 @@ describe("environment grouping", () => {
       preferredProjectRef: { environmentId: current.environmentId, projectId: current.id },
     });
     expect(entries.map((entry) => entry.group.displayName)).toEqual(["pinned", "current", "other"]);
+  });
+
+  it("lists every project except hidden ones, and lets a chosen scope win", () => {
+    const groups = [{ projectKey: "a" }, { projectKey: "b" }, { projectKey: "c" }];
+    expect(
+      resolveSidebarScopedProjectGroups({ groups, scopedGroups: [], hiddenProjectKeys: [] }),
+    ).toBeNull();
+    expect(
+      resolveSidebarScopedProjectGroups({ groups, scopedGroups: [], hiddenProjectKeys: ["gone"] }),
+    ).toBeNull();
+    expect(
+      resolveSidebarScopedProjectGroups({ groups, scopedGroups: [], hiddenProjectKeys: ["b"] }),
+    ).toEqual([{ projectKey: "a" }, { projectKey: "c" }]);
+    expect(
+      resolveSidebarScopedProjectGroups({
+        groups,
+        scopedGroups: [groups[1]!],
+        hiddenProjectKeys: ["b"],
+      }),
+    ).toEqual([{ projectKey: "b" }]);
   });
 });
