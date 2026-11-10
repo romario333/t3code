@@ -44,6 +44,7 @@ import {
   Bot,
   CircleDotIcon,
   Smartphone,
+  StickyNote,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -160,6 +161,8 @@ export interface RightPanelTabsProps {
   onAddDevice: () => void;
   /** Absent where side chats are not offered. */
   onAddSideChat?: (() => void) | undefined;
+  /** Absent where notes are not offered. */
+  onAddNotes?: (() => void) | undefined;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -346,6 +349,8 @@ function RightPanelEmptyState(props: {
   onAddDevice: () => void;
   /** Absent where side chats are not offered. */
   onAddSideChat?: (() => void) | undefined;
+  /** Absent where notes are not offered. */
+  onAddNotes?: (() => void) | undefined;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -429,6 +434,19 @@ function RightPanelEmptyState(props: {
             disabledReason:
               props.sideChatDisabledReason ?? messages(SURFACE_UNAVAILABLE_HINTS.sideChat),
             onClick: props.onAddSideChat,
+          },
+        ]
+      : []),
+    ...(props.onAddNotes
+      ? [
+          {
+            label: "Notes",
+            description: "Your private note for this thread.",
+            icon: StickyNote,
+            shortcut: "N",
+            available: true,
+            disabledReason: "",
+            onClick: props.onAddNotes,
           },
         ]
       : []),
@@ -631,6 +649,8 @@ function surfaceTitle(
         surface,
         resolve(msg("Thread on {label}", { label: surface.label })),
       );
+    case "notes":
+      return "Notes";
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return resolve(msg("Browser"));
@@ -733,6 +753,9 @@ function SurfaceIcon({
       ) : (
         <Smartphone className="size-3 shrink-0" />
       );
+    case "notes":
+      // Amber like the sidebar's note indicator, so both read as the same object.
+      return <StickyNote className="size-3 shrink-0 text-warning" />;
   }
 }
 
@@ -1273,6 +1296,18 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           },
         ]
       : []),
+    ...(props.onAddNotes
+      ? [
+          {
+            label: "Notes",
+            icon: StickyNote,
+            shortcut: "N",
+            available: true,
+            disabledReason: "",
+            onClick: props.onAddNotes,
+          },
+        ]
+      : []),
   ] as const;
 
   const handleAddSurfaceMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -1698,6 +1733,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddPullRequests={props.onAddPullRequests}
             onAddDevice={props.onAddDevice}
             onAddSideChat={props.onAddSideChat}
+            onAddNotes={props.onAddNotes}
             browserAvailable={props.browserAvailable}
             terminalAvailable={props.terminalAvailable}
             diffAvailable={props.diffAvailable}

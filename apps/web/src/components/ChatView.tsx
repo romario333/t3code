@@ -410,6 +410,7 @@ import {
 } from "./chat/useSystemComposerBanners";
 import { useDraftHeroLayoutTransition } from "./chat/useDraftHeroLayoutTransition";
 import { useLocalDispatchState } from "./chat/useLocalDispatchState";
+import { noteSummaryLine, useThreadNotesStore } from "../threadNotesStore";
 import { draftFanoutSelectionsAtom, draftSendState } from "./chat/chatViewSend";
 import {
   isCompactCommandMessage,
@@ -1163,6 +1164,18 @@ export default function ChatView(props: ChatViewProps) {
   const activeRightPanelSurface = useRightPanelStore((state) =>
     selectActiveRightPanelSurface(state.byThreadKey, activeThreadRef),
   );
+  // Selecting a thread with a note surfaces it, but only when the panel holds
+  // nothing else, so it never displaces a terminal, diff, or other surface.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- opens the note panel once per thread selection; hiding it afterwards must stick
+  useEffect(() => {
+    if (!activeThreadRef) return;
+    const { byThreadKey, open } = useRightPanelStore.getState();
+    const { surfaces } = selectThreadRightPanelState(byThreadKey, activeThreadRef);
+    if (surfaces.some((surface) => surface.kind !== "notes")) return;
+    const note = useThreadNotesStore.getState().notesByThreadKey[scopedThreadKey(activeThreadRef)];
+    if (noteSummaryLine(note) === null) return;
+    open(activeThreadRef, "notes");
+  }, [activeThreadRef]);
   const activePreviewState = useThreadPreviewState(activeThreadRef);
   const activePreviewServerEpoch = activePreviewState.serverEpoch;
   const resolvePreviewRuntimeTabId = activeThreadRef
@@ -2533,6 +2546,7 @@ export default function ChatView(props: ChatViewProps) {
   const {
     activateRightPanelSurfaceStable,
     addDeviceSurfaceStable,
+    addNotesSurfaceStable,
     addDiffSurfaceStable,
     addFilesSurfaceStable,
     addPullRequestSurfaceStable,
@@ -4270,6 +4284,7 @@ export default function ChatView(props: ChatViewProps) {
           onAddPullRequests={addPullRequestsSurfaceStable}
           onAddDevice={addDeviceSurfaceStable}
           onAddSideChat={sideChatsOffered ? openSideChatStable : undefined}
+          onAddNotes={addNotesSurfaceStable}
           browserAvailable={canOperatePreview && browserAvailable}
           terminalAvailable={activeProject !== null && canOperateTerminal}
           diffAvailable={isServerThread && diffAvailable}
