@@ -50,6 +50,7 @@ import { usePreviewMiniPlayerStore } from "../previewMiniPlayerStore";
 import { clearThreadPreviewState } from "../previewStateStore";
 import { useRightPanelStore } from "../rightPanelStore";
 import { useTerminalUiStateStore } from "../terminalUiStateStore";
+import { useThreadNotesStore } from "../threadNotesStore";
 import { buildThreadRouteParams, resolveThreadRouteRef } from "../threadRoutes";
 import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../worktreeCleanup";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
@@ -244,6 +245,7 @@ function clearDeletedThreadPanelState(ref: ScopedThreadRef) {
   useRightPanelStore.getState().removeThread(ref);
   useDiffPanelStore.getState().removeThread(ref);
   usePreviewMiniPlayerStore.getState().removeThread(ref);
+  useThreadNotesStore.getState().removeThread(ref);
 }
 
 /** A No project thread that already has its own folder, on a server that can promote it. */
