@@ -1,4 +1,4 @@
-import { SparklesIcon, XIcon } from "lucide-react";
+import { TagIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 
 import { UPSTREAM_BASE_VERSION } from "../../branding";
@@ -61,7 +61,7 @@ export function SidebarUpstreamReleasePill() {
                 className="relative flex h-full flex-1 cursor-pointer items-center gap-2 px-2"
                 onClick={handleOpen}
               >
-                <SparklesIcon className="size-3.5" />
+                <TagIcon className="size-3.5" />
                 <span>New release {release.tag}</span>
               </button>
             }

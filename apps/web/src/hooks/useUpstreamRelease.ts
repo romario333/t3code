@@ -29,6 +29,7 @@ function isUpstreamReleaseCheckEnabled(): boolean {
 export function useUpstreamRelease(): UpstreamRelease | null {
   const [release, setRelease] = useState<UpstreamRelease | null>(null);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- polls GitHub on a timer while mounted
   useEffect(() => {
     if (!isUpstreamReleaseCheckEnabled()) {
       return;

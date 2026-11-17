@@ -8,7 +8,7 @@ import { getLocalStorageItem, setLocalStorageItem } from "./hooks/useLocalStorag
  * returns published, non-prerelease releases, so nightlies (which are plain tags,
  * not Releases) never appear here — it is a clean stable-only signal.
  */
-export const UPSTREAM_REPOSITORY = "pingdotgg/t3code";
+const UPSTREAM_REPOSITORY = "pingdotgg/t3code";
 export const UPSTREAM_LATEST_RELEASE_ENDPOINT = `https://api.github.com/repos/${UPSTREAM_REPOSITORY}/releases/latest`;
 
 export interface UpstreamRelease {
@@ -45,15 +45,8 @@ export function parseUpstreamRelease(raw: unknown): UpstreamRelease | null {
 }
 
 /**
- * Whether `releaseTag` names a newer stable than the build's base.
- *
- * Compares only the numeric major.minor.patch and deliberately ignores any
- * prerelease suffix: the fork stamps its base as e.g. `0.0.28-auto.3`, which
- * standard semver would rank *below* the upstream `0.0.28` tag it is built on —
- * the opposite of what we mean. Upstream stable tags never carry a prerelease, so
- * a numeric comparison is the correct signal. Returns false if either side is not
- * valid semver, to avoid a false positive from the lexical fallback in
- * {@link compareSemverVersions}.
+ * Compares major.minor.patch only: the fork's `-auto.N` suffix would otherwise rank the
+ * base below the upstream tag it is built on. False when either side is not semver.
  */
 export function isUpstreamReleaseNewer(baseVersion: string, releaseTag: string): boolean {
   const base = parseSemver(baseVersion);
@@ -70,7 +63,7 @@ export function isUpstreamReleaseNewer(baseVersion: string, releaseTag: string):
   return release.patch > base.patch;
 }
 
-export const UPSTREAM_RELEASE_DISMISSALS_STORAGE_KEY = "t3code:upstream-release-dismissals:v1";
+const UPSTREAM_RELEASE_DISMISSALS_STORAGE_KEY = "t3code:upstream-release-dismissals:v1";
 
 const UpstreamReleaseDismissalsSchema = Schema.Struct({
   tags: Schema.Array(Schema.String),
