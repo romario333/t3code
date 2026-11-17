@@ -2385,6 +2385,7 @@ export function MaintenanceSettingsPanel() {
   const environmentId = environment?.environmentId ?? null;
   const isEnvironmentScope = scope.environmentIds.length === 1 && environmentId !== null;
   const hasServerTargets = connectedEnvironments.length > 0;
+  const serverOs = environment?.serverConfig?.environment.platform.os;
 
   return (
     <SettingsPageContainer>
@@ -2494,6 +2495,20 @@ export function MaintenanceSettingsPanel() {
             />
           }
         />
+        {serverOs === "darwin" && (
+          <SettingsRow
+            {...setting("keep-awake")}
+            description="Keep this Mac from sleeping for as long as the server runs, even when no agent is working, so it stays reachable remotely. The display can still sleep. Also in the sidebar."
+            control={
+              <ScopedSwitch
+                settingKeys={["keepAwake"]}
+                checked={settings.keepAwake}
+                onCheckedChange={(checked) => updateSettings({ keepAwake: Boolean(checked) })}
+                aria-label="Always keep this Mac awake"
+              />
+            }
+          />
+        )}
       </SettingsSection>
 
       <StorageCleanupSections />

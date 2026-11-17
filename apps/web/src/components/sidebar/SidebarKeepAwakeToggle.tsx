@@ -1,0 +1,54 @@
+import { CoffeeIcon } from "lucide-react";
+import { useAtomValue } from "@effect/atom-react";
+import { usePrimarySettings, useUpdatePrimarySettings } from "../../hooks/useSettings";
+import { primaryServerConfigAtom } from "../../state/server";
+import { SidebarMenu, SidebarMenuItem } from "../ui/sidebar";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+
+// Gated on the server's OS, not the browser's: caffeinate runs on the machine hosting the server.
+export function SidebarKeepAwakeToggle() {
+  const serverOs = useAtomValue(primaryServerConfigAtom)?.environment.platform.os;
+  const keepAwake = usePrimarySettings((settings) => settings.keepAwake);
+  const updateSettings = useUpdatePrimarySettings();
+
+  if (serverOs !== "darwin") {
+    return null;
+  }
+
+  const tooltip = keepAwake
+    ? "This Mac is being kept awake so agents can keep working. Click to allow sleep again."
+    : "Keep this Mac awake for as long as the T3 Code server runs, even when no agent is working, so you can reach it remotely. The display can still sleep.";
+
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                aria-pressed={keepAwake}
+                className={
+                  keepAwake
+                    ? "flex h-7 w-full cursor-pointer items-center gap-2 rounded-lg bg-primary/15 px-2 text-xs font-medium text-primary transition-colors hover:bg-primary/22"
+                    : "flex h-7 w-full cursor-pointer items-center gap-2 rounded-lg px-2 text-xs text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+                }
+                onClick={() => updateSettings({ keepAwake: !keepAwake })}
+              >
+                <CoffeeIcon className="size-3.5" />
+                <span>Keep awake</span>
+                {keepAwake && (
+                  <span className="ml-auto inline-flex items-center gap-1.5">
+                    <span className="inline-flex size-2 rounded-full bg-primary" />
+                    On
+                  </span>
+                )}
+              </button>
+            }
+          />
+          <TooltipPopup side="top">{tooltip}</TooltipPopup>
+        </Tooltip>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  );
+}
