@@ -5,6 +5,7 @@ import {
   buildDiffFileTreeUpdates,
   diffFileTreeEntries,
   orderDiffFilesLikeTree,
+  pickListedDiffFile,
 } from "./diffFileTree.logic";
 
 function file(type: FileDiffMetadata["type"], name: string, prevName = name): FileDiffMetadata {
@@ -45,6 +46,27 @@ describe("orderDiffFilesLikeTree", () => {
       "web/settings.ts",
       "web/settings.test.ts",
     ]);
+  });
+});
+
+describe("pickListedDiffFile", () => {
+  const paths = ["a.ts", "b.ts", "c.ts"];
+
+  it.each([
+    { candidates: ["b.ts", "c.ts"], fallbackIndex: 0, expected: "b.ts" },
+    { candidates: ["gone.ts", "c.ts"], fallbackIndex: 0, expected: "c.ts" },
+    { candidates: ["gone.ts", null], fallbackIndex: 1, expected: "b.ts" },
+    { candidates: [undefined, null], fallbackIndex: 5, expected: "c.ts" },
+    { candidates: [undefined, null], fallbackIndex: -1, expected: "a.ts" },
+  ])(
+    "picks $expected from $candidates at $fallbackIndex",
+    ({ candidates, fallbackIndex, expected }) => {
+      expect(pickListedDiffFile(paths, candidates, fallbackIndex)).toBe(expected);
+    },
+  );
+
+  it("picks nothing from an empty list", () => {
+    expect(pickListedDiffFile([], ["a.ts"], 0)).toBeNull();
   });
 });
 

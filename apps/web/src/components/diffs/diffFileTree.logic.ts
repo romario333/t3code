@@ -128,6 +128,19 @@ export function orderDiffFilesLikeTree(
     .map(({ file }) => file);
 }
 
+// The first candidate still listed, else whichever file now sits at the fallback position.
+export function pickListedDiffFile(
+  paths: ReadonlyArray<string>,
+  candidates: ReadonlyArray<string | null | undefined>,
+  fallbackIndex: number,
+): string | null {
+  return (
+    candidates.find((path): path is string => path != null && paths.includes(path)) ??
+    paths[Math.max(0, Math.min(fallbackIndex, paths.length - 1))] ??
+    null
+  );
+}
+
 export function compareDiffFileTreeEntries(
   getPositions: () => ReadonlyMap<string, number>,
 ): FileTreeSortComparator {
