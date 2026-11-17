@@ -6,6 +6,8 @@ import type {
   GitStatus,
 } from "@pierre/trees";
 
+import { diffFileTreePositions } from "@t3tools/client-runtime/diff-file-order";
+
 import { resolveFileDiffPath } from "~/lib/diffRendering";
 import { basenameOfPath, resolvePierreIconForEntry, T3_PIERRE_ICONS } from "~/pierre-icons";
 
@@ -83,6 +85,49 @@ export function collectDirectoryPaths(paths: ReadonlyArray<string>): ReadonlyArr
     }
   }
   return [...directories];
+}
+
+// A flat list in tree order: each directory stays contiguous, siblings ranked as
+// compareDiffFileTreeEntries ranks them, so the list never disagrees with the tree.
+export function orderDiffFilesLikeTree(
+  files: ReadonlyArray<FileDiffMetadata>,
+): ReadonlyArray<FileDiffMetadata> {
+  const paths = files.map(resolveFileDiffPath);
+  const positions = diffFileTreePositions(paths);
+  const keys = paths.map((path) => {
+    const key: number[] = [];
+    let directory = "";
+    for (const segment of path.split("/").slice(0, -1)) {
+      directory += `${segment}/`;
+      key.push(positions.get(directory)!);
+    }
+    key.push(positions.get(path)!);
+    return key;
+  });
+  return files
+    .map((file, index) => ({ file, key: keys[index]! }))
+    .toSorted((left, right) => {
+      const length = Math.min(left.key.length, right.key.length);
+      for (let index = 0; index < length; index++) {
+        const difference = left.key[index]! - right.key[index]!;
+        if (difference !== 0) return difference;
+      }
+      return left.key.length - right.key.length;
+    })
+    .map(({ file }) => file);
+}
+
+// The first candidate still listed, else whichever file now sits at the fallback position.
+export function pickListedDiffFile(
+  paths: ReadonlyArray<string>,
+  candidates: ReadonlyArray<string | null | undefined>,
+  fallbackIndex: number,
+): string | null {
+  return (
+    candidates.find((path): path is string => path != null && paths.includes(path)) ??
+    paths[Math.max(0, Math.min(fallbackIndex, paths.length - 1))] ??
+    null
+  );
 }
 
 export function compareDiffFileTreeEntries(
