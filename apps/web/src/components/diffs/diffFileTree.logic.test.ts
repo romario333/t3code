@@ -1,7 +1,12 @@
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { describe, expect, it } from "vite-plus/test";
 
-import { buildDiffFileTreeUpdates, diffFileTreeEntries } from "./diffFileTree.logic";
+import {
+  buildDiffFileTreeUpdates,
+  diffFileTreeEntries,
+  orderDiffFilesLikeTree,
+  pickListedDiffFile,
+} from "./diffFileTree.logic";
 
 function file(type: FileDiffMetadata["type"], name: string, prevName = name): FileDiffMetadata {
   return { type, name, prevName } as FileDiffMetadata;
@@ -21,6 +26,47 @@ describe("diffFileTreeEntries", () => {
       { path: "AGENTS.md", status: "modified" },
       { path: "docs/new.md", status: "added" },
     ]);
+  });
+});
+
+describe("orderDiffFilesLikeTree", () => {
+  it("pulls a test listed last into its directory, keeping the first-seen order", () => {
+    expect(
+      orderDiffFilesLikeTree([
+        file("change", "server/device/Host.ts"),
+        file("change", "web/settings.ts"),
+        file("change", "server/ws.ts"),
+        file("change", "server/device/Host.test.ts"),
+        file("change", "web/settings.test.ts"),
+      ]).map((entry) => entry.name),
+    ).toEqual([
+      "server/device/Host.ts",
+      "server/device/Host.test.ts",
+      "server/ws.ts",
+      "web/settings.ts",
+      "web/settings.test.ts",
+    ]);
+  });
+});
+
+describe("pickListedDiffFile", () => {
+  const paths = ["a.ts", "b.ts", "c.ts"];
+
+  it.each([
+    { candidates: ["b.ts", "c.ts"], fallbackIndex: 0, expected: "b.ts" },
+    { candidates: ["gone.ts", "c.ts"], fallbackIndex: 0, expected: "c.ts" },
+    { candidates: ["gone.ts", null], fallbackIndex: 1, expected: "b.ts" },
+    { candidates: [undefined, null], fallbackIndex: 5, expected: "c.ts" },
+    { candidates: [undefined, null], fallbackIndex: -1, expected: "a.ts" },
+  ])(
+    "picks $expected from $candidates at $fallbackIndex",
+    ({ candidates, fallbackIndex, expected }) => {
+      expect(pickListedDiffFile(paths, candidates, fallbackIndex)).toBe(expected);
+    },
+  );
+
+  it("picks nothing from an empty list", () => {
+    expect(pickListedDiffFile([], ["a.ts"], 0)).toBeNull();
   });
 });
 
