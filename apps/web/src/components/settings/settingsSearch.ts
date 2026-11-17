@@ -791,6 +791,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["caffeinate sleep prevent stay awake power laptop lid inhibit"],
   },
   {
+    id: "keep-awake",
+    title: "Always keep awake",
+    to: "/settings/maintenance",
+    scope: "environment-defaults",
+    searchTerms: ["caffeinate sleep prevent stay awake remote away always"],
+  },
+  {
     id: "background-activity",
     title: "Background activity",
     to: "/settings/maintenance",
