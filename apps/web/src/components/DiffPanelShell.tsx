@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { KeyboardEventHandler, ReactNode } from "react";
 
 import { isElectron } from "~/env";
 import { cn } from "~/lib/utils";
@@ -22,11 +22,13 @@ export function DiffPanelShell(props: {
   mode: DiffPanelMode;
   header: ReactNode;
   children: ReactNode;
+  onKeyDownCapture?: KeyboardEventHandler<HTMLDivElement>;
 }) {
   const shouldUseDragRegion = isElectron && props.mode !== "sheet" && props.mode !== "embedded";
 
   return (
     <div
+      onKeyDownCapture={props.onKeyDownCapture}
       className={cn(
         "flex h-full min-w-0 flex-col bg-background",
         props.mode === "inline"

@@ -17,7 +17,9 @@ import {
   ArrowRightIcon,
   CheckIcon,
   ChevronDownIcon,
+  ChevronLeftIcon,
   Columns2Icon,
+  FileIcon,
   FlaskConicalOffIcon,
   FolderTreeIcon,
   PilcrowIcon,
@@ -40,6 +42,7 @@ import { toolCallDiff } from "../lib/toolCallDiff";
 import { useCheckpointDiff, useTurnItemDetail } from "~/state/queries";
 import { revisionedQuery } from "~/state/revisionedQuery";
 import { cn } from "~/lib/utils";
+import { isEditableFocused } from "~/lib/editableFocus";
 import {
   type DiffPanelSelection,
   resolveToolCallDiffTarget,
@@ -79,7 +82,11 @@ import { DiffStatLabel } from "./chat/DiffStatLabel";
 import { AnnotatableCodeView, type AnnotatableCodeViewHandle } from "./diffs/AnnotatableCodeView";
 import { DiffFileTree } from "./diffs/DiffFileTree";
 import { FileExplorerPane } from "./files/FileExplorerPane";
-import { diffFileTreeEntries } from "./diffs/diffFileTree.logic";
+import {
+  diffFileTreeEntries,
+  orderDiffFilesLikeTree,
+  pickListedDiffFile,
+} from "./diffs/diffFileTree.logic";
 import { getDiffHeaderClickAction } from "./diffs/diffHeaderClick";
 import { Button, InlineButton } from "./ui/button";
 import { ToggleGroup, Toggle } from "./ui/toggle-group";
@@ -138,6 +145,7 @@ const THREAD_FOLDER = "__thread_folder__";
 const NO_GIT_REPOSITORIES: ReturnType<typeof threadChangedRepositories> = Object.freeze([]);
 const NO_TURN_DIFF_SECTIONS: ReadonlyArray<TurnDiffSection> = [];
 const DIFF_FILE_TREE_STORAGE_KEY = "t3code.diffFileTreeOpen";
+const DIFF_SINGLE_FILE_STORAGE_KEY = "t3code.diffSingleFile";
 
 const EMPTY_COLLAPSED_DIFF_FILE_KEYS: ReadonlySet<string> = new Set();
 
@@ -256,6 +264,17 @@ export default function DiffPanel({
     false,
     Schema.Boolean,
   );
+  const [singleFileMode, setSingleFileMode] = useLocalStorage(
+    DIFF_SINGLE_FILE_STORAGE_KEY,
+    false,
+    Schema.Boolean,
+  );
+  // The index lets a picked file that leaves the list fall back to its neighbour.
+  const [pickedFile, setPickedFile] = useState<{
+    scopeKey: string | null;
+    path: string;
+    index: number;
+  } | null>(null);
   const [hideTestFiles, setHideTestFiles] = useHideTestFiles();
   const [baseRefQuery, setBaseRefQuery] = useState("");
   // The open commit menu keeps the list it opened with, so rows do not move under the pointer.
@@ -761,7 +780,25 @@ export default function DiffPanel({
     const path = resolveFileDiffPath(file);
     return !hideTestFiles || path === selectedFilePath || !isTestChangedFile(path);
   };
-  const shownFileEntries = renderableFileEntries.filter(({ fileDiff }) => isFileShown(fileDiff));
+  // Tree order, so stepping through files walks the tree top to bottom.
+  const listedFilePaths = [
+    ...new Set(
+      orderDiffFilesLikeTree(renderableFiles.filter(isFileShown)).map(resolveFileDiffPath),
+    ),
+  ];
+  const scopePickedFile = pickedFile?.scopeKey === collapseScopeKey ? pickedFile : null;
+  const preferredFilePath = pickListedDiffFile(
+    listedFilePaths,
+    [scopePickedFile?.path, selectedFilePath],
+    scopePickedFile?.index ?? 0,
+  );
+  const activeFilePath = singleFileMode ? preferredFilePath : null;
+  const activeFileIndex = activeFilePath === null ? -1 : listedFilePaths.indexOf(activeFilePath);
+  const isFileDisplayed = (file: FileDiffMetadata) =>
+    isFileShown(file) && (activeFilePath === null || resolveFileDiffPath(file) === activeFilePath);
+  const shownFileEntries = renderableFileEntries.filter(({ fileDiff }) =>
+    isFileDisplayed(fileDiff),
+  );
   const shownFileKeys = shownFileEntries.map((file) => file.fileKey);
   const defaultCollapsedDiffFileKeys = settings.diffFilesCollapsed
     ? new Set(diffFileKeys)
@@ -779,7 +816,7 @@ export default function DiffPanel({
       .updateCollapsedFileKeys(collapseScopeKey, defaultCollapsedDiffFileKeys, update);
   };
   const renderLoadingBoundary = () =>
-    remainingFileCount > 0 ? (
+    remainingFileCount > 0 && !singleFileMode ? (
       <DiffFileLoadingBoundary load={loadNextFiles} count={remainingFileCount} />
     ) : null;
   const codeViewFiles = shownFileEntries.map(({ fileDiff, fileKey, fileVersion }) => ({
@@ -788,10 +825,11 @@ export default function DiffPanel({
     fileKey,
     fileVersion,
     collapsed:
-      collapsedDiffFileKeys.has(fileKey) || fileDiff.cacheKey?.endsWith(":pending") === true,
+      (!singleFileMode && collapsedDiffFileKeys.has(fileKey)) ||
+      fileDiff.cacheKey?.endsWith(":pending") === true,
   }));
   const pendingFiles = renderableFiles.filter(
-    (file) => file.cacheKey?.endsWith(":pending") && isFileShown(file),
+    (file) => file.cacheKey?.endsWith(":pending") && isFileDisplayed(file),
   );
   const allDiffFilesCollapsed = areAllDiffFilesCollapsed(shownFileKeys, collapsedDiffFileKeys);
   const diffLineStat = sourceLineStat ?? getDiffLineStat(renderableFiles);
@@ -800,8 +838,8 @@ export default function DiffPanel({
   // Lazy files that sat above the saved position load again only when asked for.
   const codeViewScroll = useCodeViewScrollRestore(
     collapseScopeKey,
-    !isRefreshingDiff && remainingFileCount === 0,
-    remainingFileCount > 0 ? loadNextFiles : null,
+    !isRefreshingDiff && (remainingFileCount === 0 || singleFileMode),
+    remainingFileCount > 0 && !singleFileMode ? loadNextFiles : null,
   );
   const attachCodeView = useStableCallback((handle: AnnotatableCodeViewHandle | null) => {
     codeViewScroll.attach(handle);
@@ -817,6 +855,11 @@ export default function DiffPanel({
     );
     const file = renderableFileEntries[index];
     if (!file) return false;
+    setPickedFile({
+      scopeKey: collapseScopeKey,
+      path: filePath,
+      index: listedFilePaths.indexOf(filePath),
+    });
     codeViewScroll.discard();
     updateCollapsedDiffFiles((current) => {
       const next = new Set(current);
@@ -826,6 +869,16 @@ export default function DiffPanel({
     if (lazySource) requestFile(filePath);
     codeViewReveal.request(file.fileKey);
     return true;
+  };
+
+  const stepActiveFile = (step: 1 | -1) => {
+    const path = listedFilePaths[activeFileIndex + step];
+    if (path !== undefined) revealDiffFile(path);
+  };
+  const toggleSingleFileMode = (on: boolean) => {
+    setSingleFileMode(on);
+    // Keep the same file in view when switching between one file and the full list.
+    if (preferredFilePath !== null) revealDiffFile(preferredFilePath);
   };
 
   // A file another view asked to reveal (a chat diff link): retried as the diff loads until it
@@ -1419,7 +1472,44 @@ export default function DiffPanel({
             <RefreshIcon size="sm" refreshing={isRefreshingDiff} />
           </SharedTooltipTrigger>
         )}
-        {diffFileKeys.length > 0 && (
+        {singleFileMode && activeFileIndex >= 0 ? (
+          <div className="flex items-center">
+            <SharedTooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label="Previous file"
+                  disabled={activeFileIndex === 0}
+                  onClick={() => stepActiveFile(-1)}
+                />
+              }
+              label="Previous file ([)"
+            >
+              <ChevronLeftIcon className="size-3.5" />
+            </SharedTooltipTrigger>
+            <span className="min-w-8 text-center text-2xs text-muted-foreground tabular-nums">
+              {activeFileIndex + 1}/{listedFilePaths.length}
+            </span>
+            <SharedTooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label="Next file"
+                  disabled={activeFileIndex === listedFilePaths.length - 1}
+                  onClick={() => stepActiveFile(1)}
+                />
+              }
+              label="Next file (])"
+            >
+              <ChevronRightIcon className="size-3.5" />
+            </SharedTooltipTrigger>
+          </div>
+        ) : null}
+        {diffFileKeys.length > 0 && !singleFileMode && (
           <SharedTooltipTrigger
             render={
               <Button
@@ -1527,6 +1617,22 @@ export default function DiffPanel({
           <SharedTooltipTrigger
             render={
               <Toggle
+                aria-label="Show one file at a time"
+                variant="ghost"
+                size="sm"
+                pressed={singleFileMode}
+                onPressedChange={(pressed) => toggleSingleFileMode(Boolean(pressed))}
+              />
+            }
+            label={singleFileMode ? "Show all files" : "Show one file at a time"}
+          >
+            <FileIcon className="size-3.5" />
+          </SharedTooltipTrigger>
+        )}
+        {diffFileKeys.length > 0 && (
+          <SharedTooltipTrigger
+            render={
+              <Toggle
                 aria-label={fileTreeOpen ? gt("Hide file tree") : gt("Show file tree")}
                 variant="ghost"
                 size="sm"
@@ -1544,7 +1650,19 @@ export default function DiffPanel({
   );
 
   return (
-    <DiffPanelShell mode={mode} header={headerRow}>
+    <DiffPanelShell
+      mode={mode}
+      header={headerRow}
+      // Capture, because the file tree stops the key events it receives.
+      onKeyDownCapture={(event) => {
+        if (!singleFileMode || (event.key !== "[" && event.key !== "]")) return;
+        if (event.metaKey || event.ctrlKey || event.altKey) return;
+        if (isEditableFocused(event.target)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        stepActiveFile(event.key === "]" ? 1 : -1);
+      }}
+    >
       {!activeThread ? (
         <div className="flex flex-1 items-center justify-center px-5 text-center text-xs text-muted-foreground/70">
           <T>Select a thread to inspect turn diffs.</T>
@@ -1738,14 +1856,16 @@ export default function DiffPanel({
                       : {})}
                     onFileCollapsedChange={setDiffFileCollapsed}
                     renderHeaderPrefix={(fileDiff, fileKey, collapsed) => {
+                      const pending = fileDiff.cacheKey?.endsWith(":pending") === true;
+                      // A lone file has nothing to fold; a pending one still needs the loader.
+                      if (singleFileMode && !pending) return null;
                       return (
                         <DiffFileCollapseToggle
                           filePath={resolveFileDiffPath(fileDiff)}
                           fileKey={fileKey}
                           collapsed={collapsed}
                           onToggle={toggleDiffFileCollapsed}
-                          {...(fileDiff.cacheKey?.endsWith(":pending") &&
-                          !collapsedDiffFileKeys.has(fileKey)
+                          {...(pending && (singleFileMode || !collapsedDiffFileKeys.has(fileKey))
                             ? {
                                 load: () => requestFile(resolveFileDiffPath(fileDiff)),
                               }
@@ -1776,7 +1896,7 @@ export default function DiffPanel({
                     <DiffFileTree
                       ariaLabel={gt("{section} files", { section: reviewSectionTitle })}
                       entries={fileTreeEntries}
-                      selectedPath={selectedFilePath}
+                      selectedPath={activeFilePath ?? selectedFilePath}
                       revealRequestId={selectedFileRevealRequestId}
                       onSelectFile={revealDiffFile}
                     />
