@@ -102,16 +102,38 @@ describe("Antigravity Auto", () => {
     expect(antigravitySessionMode("auto", modeState)).toBe(expected);
   });
 
-  it.each(["execute", "read"] as const)("asks about the %s requests agy's Auto sends", (kind) => {
-    const request = {
-      sessionId: "session-1",
-      toolCall: { toolCallId: "call-1", title: "Tool call", kind },
-      options: [{ optionId: "allow", name: "Allow", kind: "allow_once" }],
-    } satisfies EffectAcpSchema.RequestPermissionRequest;
-    expect(antigravityPermissionDisposition({ runtimeMode: "auto", cwd: null }, request)).toBe(
-      "ask",
-    );
-  });
+  it.each(["execute", "fetch", "other"] as const)(
+    "asks about the %s requests agy's Auto sends",
+    (kind) => {
+      const request = {
+        sessionId: "session-1",
+        toolCall: { toolCallId: "call-1", title: "Tool call", kind },
+        options: [{ optionId: "allow", name: "Allow", kind: "allow_once" }],
+      } satisfies EffectAcpSchema.RequestPermissionRequest;
+      expect(antigravityPermissionDisposition({ runtimeMode: "auto", cwd: null }, request)).toBe(
+        "ask",
+      );
+    },
+  );
+
+  it.each(["read", "search"] as const)(
+    "allows %s requests outside the workspace in Auto",
+    (kind) => {
+      const request = {
+        sessionId: "session-1",
+        toolCall: {
+          toolCallId: "call-1",
+          title: "Read /private/tmp/attachments/notes.txt",
+          kind,
+          locations: [{ path: "/private/tmp/attachments/notes.txt" }],
+        },
+        options: [{ optionId: "allow", name: "Allow", kind: "allow_once" }],
+      } satisfies EffectAcpSchema.RequestPermissionRequest;
+      expect(
+        antigravityPermissionDisposition({ runtimeMode: "auto", cwd: "/workspace" }, request),
+      ).toBe("allow");
+    },
+  );
 
   it.each([{ type: "readOnly" }, { type: "workspaceWrite", writableRoots: [] }])(
     "keeps the $type sandbox's denials in Auto",

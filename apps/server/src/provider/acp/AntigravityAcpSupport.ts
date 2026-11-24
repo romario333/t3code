@@ -218,6 +218,10 @@ export function antigravityPermissionDisposition(
   ) {
     return "allow";
   }
+  // agy's Auto flags reads outside the workspace, which would stall unattended threads.
+  // Reads follow T3's own rule instead, as on other providers.
+  const kind = request.toolCall.kind;
+  if (kind === "read" || kind === "search") return disposition;
   // agy's Auto has already reviewed what it sends; the user decides unless the sandbox forbids it.
   return policy.runtimeMode === "auto" ? "ask" : disposition;
 }
